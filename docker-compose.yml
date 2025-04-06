@@ -1,0 +1,59 @@
+version: '3'
+
+services:
+  go-api:
+    build: 
+      context: ./backend/go-api
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./backend/go-api:/app
+    environment:
+      - PYTHON_SERVICE_URL=http://python-service:5000
+      - ENV=development
+    depends_on:
+      - python-service
+      - postgres
+
+  python-service:
+    build:
+      context: ./backend/python-service
+      dockerfile: Dockerfile
+    ports:
+      - "5000:5000"  # Exposed for development
+    volumes:
+      - ./backend/python-service:/app
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/financial_db
+      - ENV=development
+    depends_on:
+      - postgres
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      - VITE_API_URL=http://localhost:8080
+    depends_on:
+      - go-api
+
+  postgres:
+    image: postgres:14
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=financial_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
