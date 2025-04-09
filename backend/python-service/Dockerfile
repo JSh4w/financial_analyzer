@@ -21,5 +21,9 @@ COPY . .
 # Expose port
 EXPOSE 5000
 
-# Use uvicorn with hot reloading for development
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "5000", "--reload"]
+# Use ARG to set a build-time variable
+ARG entry_point=main
+ENV ENTRY_POINT=${entry_point}
+
+# CMD uses the environment variable
+CMD uvicorn app.${ENTRY_POINT}:app --host 0.0.0.0 --port 5000 --reload

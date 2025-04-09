@@ -82,7 +82,7 @@ def get_stock_analysis(symbol: str, db: Session = Depends(get_db)):
 
 def generate_recommendation(ratios, technical):
     """Generate an investment recommendation based on analysis"""
-    # This would contain your proprietary algorithm
+
     score = 0
     
     # Example scoring (simplified)
