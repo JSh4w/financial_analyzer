@@ -1,21 +1,38 @@
 // cmd/api/main.go
 package main
 
+//Temporary simplified main file
 import (
 	"fmt"
-	"log"
 	"net/http"
-	"os"
+
+	"github.com/gorilla/mux"
 )
 
-//	"github.com/yourusername/financial-analyzer/internal/config"
-//	"github.com/yourusername/financial-analyzer/internal/handlers"
-//	"github.com/yourusername/financial-analyzer/internal/middleware"
-//	"github.com/yourusername/financial-analyzer/pkg/database"
+func HealthHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-type", "application/json")
+	w.Write([]byte(`{"status":"ok"}`))
+}
 
-//	"github.com/gin-contrib/cors"
-//	"github.com/gin-gonic/gin"
-//)
+func main() {
+	router := mux.NewRouter()
+	router.HandleFunc("/health", HealthHandler).Methods("GET")
+
+	fmt.Println("Starting Go API server on :8080")
+	http.ListenAndServe(":8080", router)
+}
+
+// Partly implemeneted Go features
+
+/*
+	"github.com/yourusername/financial-analyzer/internal/config"
+	"github.com/yourusername/financial-analyzer/internal/handlers"
+	"github.com/yourusername/financial-analyzer/internal/middleware"
+	"github.com/yourusername/financial-analyzer/pkg/database"
+
+	"github.com/gin-contrib/cors"
+	"github.com/gin-gonic/gin"
+)
 
 func main() {
 	// Load configuration
@@ -92,3 +109,4 @@ func main() {
 		log.Fatalf("Failed to start server: %v", err)
 	}
 }
+*/
