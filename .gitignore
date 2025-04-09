@@ -11,3 +11,4 @@ build/
 # Environment variables
 .env
 
+frontend_src_migrate/
