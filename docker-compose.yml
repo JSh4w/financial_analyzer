@@ -1,19 +1,19 @@
 
 services:
-  go-api:
-    build: 
-      context: ./backend/go-api
-      dockerfile: Dockerfile
-    ports:
-      - "8080:8080"
-    volumes:
-      - ./backend/go-api:/app
-    environment:
-      - PYTHON_SERVICE_URL=http://python-service:5000
-      - ENV=development
-    depends_on:
-      - python-service
-      - postgres
+  # go-api:
+  #   build: 
+  #     context: ./backend/go-api
+  #     dockerfile: Dockerfile
+  #   ports:
+  #     - "8080:8080"
+  #   volumes:
+  #     - ./backend/go-api:/app
+  #   environment:
+  #     - PYTHON_SERVICE_URL=http://python-service:5000
+  #     - ENV=development
+  #   depends_on:
+  #     - python-service
+  #     - postgres
 
   python-service:
     build:
@@ -29,19 +29,19 @@ services:
     depends_on:
       - postgres
 
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    ports:
-      - "3000:3000"
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-    environment:
-      - VITE_API_URL=http://localhost:8080
-    depends_on:
-      - go-api
+  # frontend:
+  #   build:
+  #     context: ./frontend
+  #     dockerfile: Dockerfile
+  #   ports:
+  #     - "3000:3000"
+  #   volumes:
+  #     - ./frontend:/app
+  #     - /app/node_modules
+  #   environment:
+  #     - VITE_API_URL=http://localhost:8080
+  #   depends_on:
+  #     - go-api
 
   postgres:
     image: postgres:14
