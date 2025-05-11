@@ -10,20 +10,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Install Python dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install -r requirements.txt
 
 # Install development dependencies for hot reloading
-RUN pip install --no-cache-dir uvicorn[standard] watchfiles
+RUN pip install uvicorn[standard] watchfiles
 
-# Copy source code
+# Copy startup script first (since it changes less frequently)
+COPY start-dev.sh .
+RUN chmod +x start-dev.sh
+
+# Copy source code (which changes most frequently)
 COPY . .
 
 # Expose port
 EXPOSE 5000
 
-# Use ARG to set a build-time variable
-ARG entry_point=main
-ENV ENTRY_POINT=${entry_point}
-
-# CMD uses the environment variable
-CMD uvicorn app.${ENTRY_POINT}:app --host 0.0.0.0 --port 5000 --reload
+# Use the script as the entry point
+CMD ["./start-dev.sh"]

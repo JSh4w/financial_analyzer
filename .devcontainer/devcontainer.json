@@ -9,16 +9,20 @@
 	"service": "python-service",
 
 	"workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+
+	
 	"features": {
-		"ghcr.io/devcontainers/features/docker-outside-of-docker:1": {},
+		"ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
+			"version":"latest",
+			"mobyd":false
+		},
 		"ghcr.io/devcontainers/features/github-cli:1": {},
-		"ghcr.io/devcontainers/features/go:1": {},
-		"ghcr.io/devcontainers/features/node:1": {},
-		"ghcr.io/devcontainers/features/python:1": {},
   	    "ghcr.io/devcontainers/features/common-utils:2": {
 			"installZsh": true,
 			"configureZshAsDefaultShell": true,
-			"username": "vscode"
+			"username": "vscode",
+			"upgradePackages": false
+
 		}	
 	},
 	

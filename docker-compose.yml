@@ -23,6 +23,7 @@ services:
       - "5000:5000"  # Exposed for development
     volumes:
       - ./backend/python-service:/app
+      - pip_cache:/root/.cache/pip  # Cache pip packages
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/financial_db
       - ENV=development
@@ -56,3 +57,4 @@ services:
 
 volumes:
   postgres_data:
+  pip_cache:

@@ -5,14 +5,14 @@ from sqlalchemy.orm import Session
 import pandas as pd
 import numpy as np
 
-from app.api.endpoints import analysis, data
-from app.core.analysis import financial_ratios, technical_indicators
-from app.core.data import stock_data
-from app.models import database, schemas
+# from app.api.endpoints import analysis, data
+# from app.core.analysis import financial_ratios, technical_indicators
+# from app.core.data import stock_data
+# from app.models import database, schemas
 
 # Initialize FastAPI app
 app = FastAPI(
-    title="Financial Analysis Service",
+    title="Financial Analysis Service Hello ",
     description="Python service for financial data analysis",
     version="0.1.0"
 )
@@ -27,11 +27,11 @@ app.add_middleware(
 )
 
 # Include API routers
-app.include_router(analysis.router, prefix="/analysis", tags=["Analysis"])
-app.include_router(data.router, prefix="/data", tags=["Data"])
+#app.include_router(analysis.router, prefix="/analysis", tags=["Analysis"])
+#app.include_router(data.router, prefix="/data", tags=["Data"])
 
 # Create database tables
-database.Base.metadata.create_all(bind=database.engine)
+#database.Base.metadata.create_all(bind=database.engine)
 
 # Dependency to get the database session
 def get_db():
@@ -43,7 +43,8 @@ def get_db():
 
 @app.get("/")
 def root():
-    return {"message": "Financial Analysis Service API"}
+    return {"message": """Financial Analysis Service API
+            Welcome to my page"""}
 
 @app.get("/health")
 def health_check():
