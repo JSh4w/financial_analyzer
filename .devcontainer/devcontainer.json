@@ -22,8 +22,8 @@
 			"configureZshAsDefaultShell": true,
 			"username": "vscode",
 			"upgradePackages": false
-
-		}	
+		}
+		//"ghcr.io/devcontainers-extra/features/poetry:2": {}
 	},
 	
 	// Tell VS Code to use Zsh as the default terminal
@@ -31,10 +31,15 @@
 	  "vscode": {
 		"settings": {
 		  "terminal.integrated.defaultProfile.linux": "zsh"
-		}
+		},
+		"extensions": [
+			"ms-python.vscode-pylance",
+			"ms-python.python",
+			"ms-python.debugpy",
+			"ms-vscode.live-server"
+		]
 	  }
 	},
 	
 	// Command to run after container creation
-	"postCreateCommand": "echo 'Container is ready with Zsh as default shell!'"
-  }
+}
