@@ -24,5 +24,3 @@ def setup_logging(level: str = "INFO") -> None:
         },
         "root": {"level": level, "handlers": ["console"]},
     }
-    
-    logging.config.dictConfig(log_config)
