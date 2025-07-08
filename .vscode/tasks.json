@@ -5,7 +5,7 @@
         "label": "Start Server",
         "type": "shell",
         "command": "uvicorn",
-        "args": ["app.main_test:app", "--host", "0.0.0.0", "--port", "5000", "--reload"],
+        "args": ["app.main:app", "--host", "0.0.0.0", "--port", "5000", "--reload"],
         "group": "build",
         "presentation": {
           "echo": true,
