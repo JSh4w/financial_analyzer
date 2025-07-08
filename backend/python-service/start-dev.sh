@@ -6,4 +6,4 @@ echo "Starting development server..."
 
 echo "http://localhost:5000/apple"
 # Start server with hot reloading
-uvicorn app.main_test:app --host 0.0.0.0 --port 5000 --reload --reload-delay 0.2
+uvicorn app.main:app --host 0.0.0.0 --port 5000 --reload --reload-delay 0.2
