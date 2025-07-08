@@ -23,6 +23,7 @@
 			"username": "vscode",
 			"upgradePackages": false
 		}
+		// poetry feature not needed as used in Dockerfile
 		//"ghcr.io/devcontainers-extra/features/poetry:2": {}
 	},
 	
@@ -36,10 +37,13 @@
 			"ms-python.vscode-pylance",
 			"ms-python.python",
 			"ms-python.debugpy",
-			"ms-vscode.live-server"
+			"ms-vscode.live-server",
+			"ms-python.pylint",
+			"EricSia.pythonsnippets3",
+			"tamasfe.even-better-toml"
 		]
 	  }
-	},
+	}
 	
 	// Command to run after container creation
 }
