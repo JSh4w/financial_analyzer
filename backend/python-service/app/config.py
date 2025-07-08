@@ -19,6 +19,3 @@ class Settings(BaseSettings):
     FINNHUB_API_KEY : str
     FINNHUB_BASE_URL : str
     POSTGRESQL_KEY : str = "TEMP VAL"
-
-myset = Settings().model_dump()
-print(myset)
