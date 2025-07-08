@@ -29,6 +29,7 @@ services:
       - ENV=development
     depends_on:
       - postgres
+    command: uvicorn app.main_test:app --host 0.0.0.0 --port 5000
 
   # frontend:
   #   build:
