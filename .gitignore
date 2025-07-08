@@ -11,4 +11,7 @@ build/
 # Environment variables
 .env
 
+# Python cache files 
+.pyc
+
 frontend_src_migrate/
