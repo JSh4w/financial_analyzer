@@ -8,12 +8,16 @@ package-mode = false
 
 [tool.poetry.dependencies]
 python = ">=3.11,<3.13"
-fastapi = "0.104.0"
-uvicorn = "0.23.2"
-sqlalchemy = "2.0.22"
-pandas = "2.1.1"
-numpy = "1.26.0"
-websockets = "15.0.1"
+fastapi = "0.104.0" #required to create the API
+uvicorn = "0.23.2" #required to run the server
+sqlalchemy = "2.0.22" #required to handle database interactions
+pandas = "2.1.1" #required to handle dataframes
+numpy = "1.26.0" #required to handle numerical operations
+websockets = "15.0.1" #more modern than websocket, built around asyncio
+pydantic = "^2.11.7" #required to validate data
+pydantic-settings = "^2.10.1" #required to validate data
+psycopg2-binary = "^2.9.10" #required to connect to postgres
+alembic = "^1.16.2" #required to manage database migrations
 
 [tool.poetry.group.dev.dependencies]
 pytest = "7.4.0"
