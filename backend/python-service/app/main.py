@@ -1,20 +1,76 @@
-# app/main.py
-from fastapi import FastAPI, HTTPException, Depends
+# backend/python-service/app/main_test.py
+import os
+import json
+import asyncio
+from datetime import datetime
+#from typing import List, Optional
+from contextlib import asynccontextmanager
+import websockets
+from dotenv import load_dotenv
+#from pydantic import BaseModel
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.orm import Session
-import pandas as pd
-import numpy as np
 
-# from app.api.endpoints import analysis, data
-# from app.core.analysis import financial_ratios, technical_indicators
-# from app.core.data import stock_data
-# from app.models import database, schemas
 
-# Initialize FastAPI app
+load_dotenv()
+
+
+latest_data = {"message": "No data received yet", "timestamp": None}
+
+
+#Finnhub API keys
+FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY")
+
+# What to do to received data 
+async def connect_to_finnhub():
+    """Handles incoming WebSocket messages from server"""
+    global latest_data
+    uri = f"wss://ws.finnhub.io?token={FINNHUB_API_KEY}"
+    try:
+        async with websockets.connect(uri) as ws:
+            await ws.send('{"type":"subscribe","symbol":"AAPL"}')
+            print("Subscribed to APPLE")
+            try:
+                async for message in ws:
+                    data = json.loads(message)
+                    timestamp = datetime.now().isoformat()
+
+                    #Update data 
+                    latest_data = {
+                        "message": data,
+                        "timestamp": timestamp
+                    }
+
+            except json.JSONDecodeError:
+                print(f"Failed to parse message {message}")
+
+            # #get and store symbol
+            # if 'data' in data:
+            #     for trade in data['data']:
+            #         symbol = trade.get('s','unknown')
+            #         stock_data[symbol] = {
+            #             "price": trade.get('p'),
+            #             "volume": trade.get('v'),
+            #             "timestamp": trade.get('t'),
+            #             "conditions": trade.get('c',[]),
+            #             "last_updated": timestamp
+            #         }
+            # print(f"Received data: {data}")
+    except Exception as e :
+        raise Exception(f"Failed to parse message: {e}") from e 
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    asyncio.create_task(connect_to_finnhub())
+    yield 
+
+# Import your actual app creation logic, but configure it for testing
 app = FastAPI(
-    title="Financial Analysis Service Hello ",
+    title="Financial Analysis Service",
     description="Python service for financial data analysis",
-    version="0.1.0"
+    version="0.0.1",
+    lifespan=lifespan
 )
 
 # Configure CORS
@@ -26,91 +82,27 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include API routers
-#app.include_router(analysis.router, prefix="/analysis", tags=["Analysis"])
-#app.include_router(data.router, prefix="/data", tags=["Data"])
-
-# Create database tables
-#database.Base.metadata.create_all(bind=database.engine)
-
-# Dependency to get the database session
-def get_db():
-    db = database.SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
 @app.get("/")
 def root():
-    return {"message": """Financial Analysis Service API
-            Welcome to my page"""}
+    return {"message": "Stock service"}
 
 @app.get("/health")
 def health_check():
-    return {"status": "healthy"}
+    return {"status": "healthy", "environment": "production"}
 
-@app.get("/stock/{symbol}/analysis")
-def get_stock_analysis(symbol: str, db: Session = Depends(get_db)):
-    """
-    Get comprehensive analysis for a stock including:
-    - Financial ratios
-    - Technical indicators
-    - Fundamental analysis
-    - Growth metrics
-    """
-    try:
-        # Get stock data
-        stock_prices = stock_data.get_historical_prices(symbol)
-        financial_data = stock_data.get_financial_statements(symbol)
-        
-        # Perform analysis
-        ratios = financial_ratios.calculate_key_ratios(financial_data)
-        technical = technical_indicators.calculate_indicators(stock_prices)
-        
-        # Combine results
-        analysis_result = {
-            "symbol": symbol,
-            "financialRatios": ratios,
-            "technicalIndicators": technical,
-            "recommendation": generate_recommendation(ratios, technical)
-        }
-        
-        return analysis_result
-    
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+@app.get("/apple")
+def get_stock_data():
+    return latest_data
 
-def generate_recommendation(ratios, technical):
-    """Generate an investment recommendation based on analysis"""
+# Special test-only endpoints can be added here
+@app.get("/test/reset")
+def reset_test_data():
+    """Endpoint to reset test data between test runs"""
+    # You can add logic here to reset any test databases or state
+    return {"message": "Test data reset successfully"}
 
-    score = 0
-    
-    # Example scoring (simplified)
-    if ratios.get("pe_ratio", 100) < 15:
-        score += 1
-    if ratios.get("debt_to_equity", 2) < 1:
-        score += 1
-    if technical.get("rsi", 50) < 70 and technical.get("rsi", 50) > 30:
-        score += 1
-    if technical.get("macd_signal", 0) > 0:
-        score += 1
-        
-    # Map score to recommendation
-    recommendations = {
-        0: "Strong Sell",
-        1: "Sell",
-        2: "Hold",
-        3: "Buy",
-        4: "Strong Buy"
-    }
-    
-    return {
-        "rating": recommendations.get(score, "Hold"),
-        "score": score,
-        "maxScore": 4
-    }
 
+# This allows running the file directly for testing
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("app.main:app", host="0.0.0.0", port=5000, reload=True)
+    uvicorn.run("app.main_test:app", host="0.0.0.0", port=5000, reload=True)
