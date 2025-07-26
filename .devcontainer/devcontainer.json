@@ -22,9 +22,15 @@
 			"configureZshAsDefaultShell": true,
 			"username": "vscode",
 			"upgradePackages": false
-		}
+		},
 		// poetry feature not needed as used in Dockerfile
 		//"ghcr.io/devcontainers-extra/features/poetry:2": {}
+
+		// Add Node.js for frontend development
+		"ghcr.io/devcontainers/features/node:1": {
+			"nodeGypDependencies": true,
+			"version": "18"
+		}
 	},
 	
 	// Tell VS Code to use Zsh as the default terminal
@@ -43,7 +49,7 @@
 			"tamasfe.even-better-toml"
 		]
 	  }
-	}
-	
-	// Command to run after container creation
+	},
+
+   "postStartCommand": "npm install -g @anthropic-ai/claude-code"	// Command to run after container creation
 }
