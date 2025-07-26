@@ -1,20 +1,16 @@
 # backend/python-service/app/main_test.py
 import os
 from typing import Optional, Any, Set, Dict, List, Callable
+from dataclasses import dataclass
 import json
 import asyncio
 import logging
-from datetime import datetime
 from enum import Enum
-#from typing import List, Optional
-from contextlib import asynccontextmanager
-from pydantic import WebsocketUrl
 import websockets
 from dotenv import load_dotenv
-#from pydantic import BaseModel
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from dataclasses import dataclass
+
+from app.market_data_handler import TradeDataHandler
+
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -52,7 +48,7 @@ class ConnectionState(Enum):
 class WebSocketManager:
     """ Manages Websocket connections with dynamic subscriptions
     allowing scope for multiple users"""
-    def __init__(self):
+    def __init__(self, storage_dict : Dict = None):
         self.finnhub_api_key = os.getenv("FINNHUB_API_KEY")
         if not self.finnhub_api_key:
             raise ValueError("FINNHUB_API_KEY variable is required")
@@ -72,9 +68,10 @@ class WebSocketManager:
         self.reconnect_delay = 5
 
         self.connection_task: Optional[asyncio.Task] = None
-        self.queueing_task: Optional[asyncio.Task] = None 
+        self.queueing_task: Optional[asyncio.Task] = None
 
-        self.data_handlers: Dict[str,Callable] = {}
+        #Setup with an Instance
+        self.data_handler: Callable = TradeDataHandler(storage_dict)
 
 
 
@@ -126,7 +123,7 @@ class WebSocketManager:
         to update database, notify frontend or process data"""
         symbol = symbol.upper()
 
-        if symbol in self.active_subscriptions.keys():
+        if symbol in self.active_subscriptions:
             logger.info("Subscriptions to %s already present",symbol)
             if user_id in self.active_subscriptions[symbol]:
                 logger.warning("User already subscribed")
@@ -164,7 +161,6 @@ class WebSocketManager:
     async def unsubscribe(self, symbol: str, user_id : int)-> bool:
         """Unscribe a symbol from websocket and data handler"""
         symbol = symbol.upper()
-
         if symbol not in self.active_subscriptions:
             logger.warning("Not subscribed to %s, returning ",symbol)
             return True
@@ -197,7 +193,6 @@ class WebSocketManager:
         try:
             message = json.dumps({"type": "unsubscribe", "symbol": symbol})
             await self.websocket.send(message)
-            logger.info("Unsubscribed from %s",symbol)
             return True
         except Exception as e:
             logger.error("Failed to unsubscribe from %s : %s", symbol, e)
@@ -220,13 +215,13 @@ class WebSocketManager:
         """Log comprehensive status of all subscriptions and connected users"""
         total_symbols = len(self.active_subscriptions)
         total_users = sum(len(users) for users in self.active_subscriptions.values())
-        
+
         logger.info("=== WebSocket Manager Status ===")
         logger.info("Connection State: %s", self.state.value)
         logger.info("Total Symbols: %s", total_symbols)
         logger.info("Total User Subscriptions: %s", total_users)
         logger.info("Queue Size: %s", self.subscription_queue.qsize())
-        
+
         if self.active_subscriptions:
             logger.info("Active Subscriptions:")
             for symbol, user_list in self.active_subscriptions.items():
@@ -257,28 +252,12 @@ class WebSocketManager:
         """Process incoming WebSocket messages"""
         try:
             data = json.loads(message)
-            timestamp = datetime.now().isoformat()
-
             # Handle different message types
             if 'data' in data:
                 # Trade data
                 for trade in data['data']:
-                    symbol = trade.get('s', 'unknown')
-                    trade_data = {
-                        "symbol": symbol,
-                        "price": trade.get('p'),
-                        "volume": trade.get('v'),
-                        "timestamp": trade.get('t'),
-                        "conditions": trade.get('c', []),
-                        "received_at": timestamp
-                    }
-
-                    # Call registered handler if exists
-                    # if symbol in self.data_handlers:
-                    #     await self.data_handlers[symbol](trade_data)
-                    # else:
-                        # Default logging
-                    logger.info("Trade data for %s: %s", symbol, trade_data)
+                    if self.data_handler:
+                        self.data_handler.add_stock_data(trade)
 
             elif 'type' in data:
                 # Control messages
@@ -296,13 +275,13 @@ class WebSocketManager:
                 await self.connect()
 
                 async for message in self.websocket:
-                    logger.info(str(message))
                     if message == 1:
                         logger.debug("Recieved ping")
                         continue
                     if isinstance(message, bytes):
                         message = message.decode('utf-8')
-                    #await self._process_message(message)
+                    #logger.info("Processing messagge %s",message)
+                    await self._process_message(message)
 
             except websockets.exceptions.ConnectionClosed:
                 logger.warning("Connection lost, attempting reconnect...")
@@ -329,7 +308,7 @@ class WebSocketManager:
             try:
                 await self.queueing_task
             except asyncio.CancelledError:
-                pass 
+                pass
         if self.connection_task:
             self.connection_task.cancel()
             try:
@@ -376,4 +355,5 @@ class WebSocketManager:
             success = await self.unsubscribe(request.symbol, request.user_id)
         if not success and self.state != ConnectionState.CONNECTED:
             logger.info("Subscription queued- will process when connected")
+
 
