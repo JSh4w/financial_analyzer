@@ -43,7 +43,7 @@ services:
   #   environment:
   #     - VITE_API_URL=http://localhost:8080
   #   depends_on:
-  #     - go-api
+  #     - python-service
 
   postgres:
     image: postgres:14
