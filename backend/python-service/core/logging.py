@@ -1,4 +1,5 @@
-import logging
+"Handles logging configuration for project"
+import logging.config
 from typing import Dict, Any
 
 def setup_logging(level: str = "INFO") -> None:
@@ -24,3 +25,7 @@ def setup_logging(level: str = "INFO") -> None:
         },
         "root": {"level": level, "handlers": ["console"]},
     }
+
+    #Sets logging configuration across files
+    logging.config.dictConfig(log_config)
+    
