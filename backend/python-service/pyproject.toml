@@ -18,10 +18,11 @@ pydantic = "^2.11.7" #required to validate data
 pydantic-settings = "^2.10.1" #required to validate data
 psycopg2-binary = "^2.9.10" #required to connect to postgres
 alembic = "^1.16.2" #required to manage database migrations
+httpx = "^0.28.1"
+supabase = "^2.17.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "7.4.0"
-httpx = "0.24.1"
 uvicorn = {extras = ["standard"], version = "0.23.2"}
 watchfiles = "^0.21.0" #watchfiles enables hot-reloading in uvicorn
 
