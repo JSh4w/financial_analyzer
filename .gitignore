@@ -12,6 +12,6 @@ build/
 .env
 
 # Python cache files 
-.pyc
+*.pyc
 
 frontend_src_migrate/
