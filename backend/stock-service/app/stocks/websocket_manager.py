@@ -7,22 +7,13 @@ import asyncio
 import logging
 from enum import Enum
 import websockets
-from dotenv import load_dotenv
 
-from app.market_data_handler import TradeDataHandler
+from app.stocks.market_data_handler import TradeDataHandler
+from app.config import Settings
 
-
-load_dotenv()
+settings = Settings()
 logger = logging.getLogger(__name__)
 
-"""
-For reference you need this:
-handle mesage queue input: from asyncio as its concurrent
-this containts the stock to connect to and the user id , we might want to update this in the futue but for now just work
-then add subscription and remove scubription to stock if equal 0 from users
-handle connecting and reconnecting using lock?
-
-"""
 @dataclass
 class SubscriptionRequest:
     """Message for subscription management"""
@@ -49,7 +40,7 @@ class WebSocketManager:
     """ Manages Websocket connections with dynamic subscriptions
     allowing scope for multiple users"""
     def __init__(self, storage_dict : Dict = None):
-        self.finnhub_api_key = os.getenv("FINNHUB_API_KEY")
+        self.finnhub_api_key = settings.FINNHUB_API_KEY
         if not self.finnhub_api_key:
             raise ValueError("FINNHUB_API_KEY variable is required")
 
