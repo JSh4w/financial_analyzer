@@ -23,8 +23,6 @@ pytest = "7.4.0"
 uvicorn = {extras = ["standard"], version = "0.23.2"}
 watchfiles = "^0.21.0"
 
-[tool.pylint.MASTER]
-init-hook = "import sys; sys.path.append('.')"
 
 [build-system]
 requires = ["poetry-core"]
