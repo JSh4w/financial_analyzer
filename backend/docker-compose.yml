@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  stock-service:
+    build:
+      context: ./stock-service
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8001"
+    environment:
+      - FINNHUB_API_KEY=${FINNHUB_API_KEY}
+    volumes:
+      - ./stock-service/logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  portfolio-service:
+    build:
+      context: ./portfolio-service
+      dockerfile: Dockerfile
+    ports:
+      - "8002:8002"
+    environment:
+      - DATABASE_URL=${SUPABASE_DATABASE_URL}
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
