@@ -22,7 +22,7 @@ latest_data = {"message": "No data received yet", "timestamp": None}
 settings = Settings()
 
 # Global WebSocket manager instance
-global_ws_manager = None
+GLOBAL_WS_MANAGER = None
 
 async def connect_to_websocket_manager():
     """Connect to the WebSocketManager and return it started"""
@@ -40,19 +40,19 @@ async def connect_to_websocket_manager():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """FastAPI lifespan manager - startup and shutdown events"""
-    global global_ws_manager
-    
+    global GLOBAL_WS_MANAGER
+
     # STARTUP: Initialize WebSocket manager when app starts
     print("Starting WebSocket manager on app startup...")
-    global_ws_manager = await connect_to_websocket_manager()
-    
+    GLOBAL_WS_MANAGER = await connect_to_websocket_manager()
+
     yield  # App runs here
-    
+
     # SHUTDOWN: Clean up when app stops
     print("Shutting down WebSocket manager...")
-    if global_ws_manager:
-        await global_ws_manager.stop()
-        global_ws_manager = None
+    if GLOBAL_WS_MANAGER:
+        await GLOBAL_WS_MANAGER.stop()
+        GLOBAL_WS_MANAGER = None
 
 app = FastAPI(
     title="Stock Market Data Service",
@@ -90,13 +90,13 @@ def test_post():
 @app.get("/ws_manager")
 async def subscribe_to_apple():
     """Subscribe to AAPL stock data"""
-    global global_ws_manager
-    
-    if global_ws_manager is None:
+    global GLOBAL_WS_MANAGER
+
+    if GLOBAL_WS_MANAGER is None:
         return {"message": "WebSocket manager is not running", "status": "error"}
-    
+
     try:
-        await global_ws_manager.enqueue_subscription("AAPL", 123)
+        await GLOBAL_WS_MANAGER.enqueue_subscription("AAPL", 123)
         return {"message": "Subscribed to AAPL successfully", "status": "subscribed", "symbol": "AAPL"}
     except Exception as e:
         return {"message": f"Failed to subscribe to AAPL: {str(e)}", "status": "error"}
@@ -104,13 +104,13 @@ async def subscribe_to_apple():
 @app.get("/ws_manager/close")
 async def unsubscribe_from_apple():
     """Unsubscribe from AAPL stock data"""
-    global global_ws_manager
-    
-    if global_ws_manager is None:
+    global GLOBAL_WS_MANAGER
+
+    if GLOBAL_WS_MANAGER is None:
         return {"message": "WebSocket manager is not running", "status": "not_running"}
-    
+
     try:
-        await global_ws_manager.enqueue_unsubscription("AAPL", 123)
+        await GLOBAL_WS_MANAGER.enqueue_unsubscription("AAPL", 123)
         return {"message": "Unsubscribed from AAPL successfully", "status": "unsubscribed", "symbol": "AAPL"}
     except Exception as e:
         return {"message": f"Failed to unsubscribe from AAPL: {str(e)}", "status": "error"}
@@ -118,16 +118,16 @@ async def unsubscribe_from_apple():
 @app.get("/ws_manager/status")
 async def get_websocket_manager_status():
     """Get the status of the WebSocket manager"""
-    global global_ws_manager
-    
-    if global_ws_manager is None:
+    global GLOBAL_WS_MANAGER
+
+    if GLOBAL_WS_MANAGER is None:
         return {"status": "stopped", "message": "WebSocket manager is not running"}
-    
+
     try:
         # Get current data from the manager
-        storage_data = global_ws_manager.data_handler.storage if hasattr(global_ws_manager, 'data_handler') else {}
+        storage_data = GLOBAL_WS_MANAGER.data_handler.storage if hasattr(GLOBAL_WS_MANAGER, 'data_handler') else {}
         return {
-            "status": "running", 
+            "status": "running",
             "message": "WebSocket manager is active",
             "data": storage_data
         }
@@ -137,13 +137,13 @@ async def get_websocket_manager_status():
 @app.get("/ws_manager/data")
 async def get_websocket_data():
     """Get current data from the WebSocket manager"""
-    global global_ws_manager
-    
-    if global_ws_manager is None:
+    global GLOBAL_WS_MANAGER
+
+    if GLOBAL_WS_MANAGER is None:
         return {"error": "WebSocket manager is not running"}
-    
+
     try:
-        return global_ws_manager.data_handler.storage
+        return GLOBAL_WS_MANAGER.data_handler.storage
     except Exception as e:
         return {"error": f"Failed to get data: {str(e)}"}
 
