@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     Configuration class for managing environment variables and settings.
     This class utilizes pydantic's BaseSettings to handle configuration settings
     from environment variables. It is designed to be flexible and easy to use,
-    making it suitable for a wide range of applications.
+    making it suitable for a wide range of applications. ".env" automatically loaded
     """
     model_config = SettingsConfigDict(
         env_file='backend/python-service/.env',
@@ -18,4 +18,9 @@ class Settings(BaseSettings):
     )
     FINNHUB_API_KEY : str
     FINNHUB_BASE_URL : str
+    ALPHA_VANTAGE_API_KEY : str
     POSTGRESQL_KEY : str = "TEMP VAL"
+    SUPABASE_URL : str
+    SUPABASE_KEY : str
+    GOCARDLESS_KEY : str
+    GOCARDLESS_ID  : str
