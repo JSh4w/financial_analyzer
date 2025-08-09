@@ -21,3 +21,8 @@ This is a Financial Analyzer application with:
   * Create a .env file in the project root directory
   * Use specific environment-specific .env files (e.g., .env.development, .env.production)
   * Can also set environment variables directly through the system or deployment platform
+
+## Terminal Changes
+- Always confirm specific changes before executing commands in the terminal
+- Use clear and descriptive commit messages when making changes
+- Verify command syntax and potential impacts before running
