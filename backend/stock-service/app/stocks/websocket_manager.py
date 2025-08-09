@@ -39,7 +39,7 @@ class ConnectionState(Enum):
 class WebSocketManager:
     """ Manages Websocket connections with dynamic subscriptions
     allowing scope for multiple users"""
-    def __init__(self, storage_dict : Dict = None):
+    def __init__(self, data_processor: Optional[Callable] = None, storage_dict : Dict = None):
         self.finnhub_api_key = settings.FINNHUB_API_KEY
         if not self.finnhub_api_key:
             raise ValueError("FINNHUB_API_KEY variable is required")
@@ -48,6 +48,7 @@ class WebSocketManager:
         self.upstream_task: Optional[asyncio.Task] = None
         self.state = ConnectionState.DISCONNECTED
         self._state_lock = asyncio.Lock()
+        self._subscription_lock = asyncio.Lock()
 
         self.subscription_queue = asyncio.Queue(maxsize = 20)
         self.message_queue = asyncio.Queue(maxsize = 100)
@@ -61,8 +62,8 @@ class WebSocketManager:
         self.connection_task: Optional[asyncio.Task] = None
         self.queueing_task: Optional[asyncio.Task] = None
 
-        #Setup with an Instance
-        self.data_handler: Callable = TradeDataHandler(storage_dict)
+        # Use provided data processor or default to TradeDataHandler
+        self.data_processor = data_processor or TradeDataHandler(storage_dict)
 
 
 
@@ -87,8 +88,16 @@ class WebSocketManager:
             logger.info("Connected to Finnhub WebSocket")
 
             # Reconnect all symbols
-            for symbol in self.active_subscriptions:
-                await self._subscribe_symbol(symbol)
+            async with self._subscription_lock:
+                symbols_to_reconnect = list(self.active_subscriptions.keys())
+            
+            failed_symbols=[]
+            for symbol in symbols_to_reconnect:
+                success = await self._subscribe_symbol(symbol)
+                if not success:
+                    failed_symbols.append(symbol)
+            if failed_symbols:
+                logger.warning("Failed to resubsrcibe to symbols: %s ", failed_symbols)
             return True
 
         except Exception as e:
@@ -101,10 +110,13 @@ class WebSocketManager:
     async def disconnect(self):
         """Close WebSocket connection and clear attributed"""
         if self.websocket:
-            await self.websocket.close()
-            async with self._state_lock:
-                self.state = ConnectionState.DISCONNECTED
-            self.websocket = None
+            try:
+                await self.websocket.close()
+                async with self._state_lock:
+                    self.state = ConnectionState.DISCONNECTED
+                self.websocket = None
+            except Exception as e:
+                logger.WARNING("Issue when diconnecting Webscocket %s,"e)
         else:
             logger.info("Not connected")
         logger.info("Disconnected from WebSocket")
@@ -114,20 +126,23 @@ class WebSocketManager:
         to update database, notify frontend or process data"""
         symbol = symbol.upper()
 
-        if symbol in self.active_subscriptions:
-            logger.info("Subscriptions to %s already present",symbol)
-            if user_id in self.active_subscriptions[symbol]:
-                logger.warning("User already subscribed")
+        subscribe_symbol = False
+        async with self._subscription_lock:
+            if symbol in self.active_subscriptions:
+                logger.info("Subscriptions to %s already present",symbol)
+                if user_id in self.active_subscriptions[symbol]:
+                    logger.warning("User already subscribed")
+                else:
+                    self.active_subscriptions[symbol].append(user_id)  # Add user directly
+                return True
             else:
-                self.active_subscriptions[symbol].append(user_id)
-            return True
+                subscribe_symbol = True
 
-
-        if self.state == ConnectionState.CONNECTED:
-            #will return
+        if subscribe_symbol:
             subscribed = await self._subscribe_symbol(symbol)
             if subscribed:
-                self.active_subscriptions.setdefault(symbol, []).append(user_id)
+                async with self._subscription_lock:
+                    self.active_subscriptions.setdefault(symbol, []).append(user_id)
             return subscribed
 
         logger.info("subscription to %s queued - not connected to websocket", symbol)
@@ -136,6 +151,7 @@ class WebSocketManager:
 
     async def _subscribe_symbol(self, symbol : str):
         """Send subscription message for a symbol"""
+        symbol = symbol.upper()
         if self.state != ConnectionState.CONNECTED:
             logger.warning("Can not subscribe to %s stock, no websocket connection", symbol)
             return False
@@ -152,29 +168,36 @@ class WebSocketManager:
     async def unsubscribe(self, symbol: str, user_id : int)-> bool:
         """Unscribe a symbol from websocket and data handler"""
         symbol = symbol.upper()
-        if symbol not in self.active_subscriptions:
-            logger.warning("Not subscribed to %s, returning ",symbol)
-            return True
+        unsubscribed_symbol = False
+        async with self._subscription_lock:
+            if symbol not in self.active_subscriptions:
+                logger.info("Tried to remove user from non-existent symbol: %s", symbol)
+                return True 
+            elif user_id not in self.active_subscriptions[symbol]:
+                logger.info("Tried to remove non-existent user_id: %s from symbol: %s", user_id, symbol)
+                return True
+            if len(self.active_subscriptions[symbol])==1:
+                unsubscribed_symbol = True
 
-        if user_id not in self.active_subscriptions[symbol]:
-            logger.warning("User_id: %s was not in subscription list",user_id)
-            return True
+        if unsubscribed_symbol:
+            unsubscribed = await self._unsubscribe_symbol(symbol)
+            if not unsubscribed:
+                logger.info("unsubscribe unsuccessful")
+                return False
 
-        if self.state == ConnectionState.CONNECTED:
-
-            logger.info("Unsubscribed from %s", symbol)
-            self.active_subscriptions[symbol].remove(user_id)
+        async with self._subscription_lock:
+            try:
+                self.active_subscriptions[symbol].remove(user_id)
+            except KeyError:
+                logger.info("Tried to remove user from non-existent symbol: %s", symbol)
+                return True
+            except ValueError:
+                logger.info("Tried to remove non-existent user_id: %s from symbol: %s", user_id, symbol)
+                return True
             if len(self.active_subscriptions[symbol])==0:
                 del self.active_subscriptions[symbol]
-                unsubscribed = await self._unsubscribe_symbol(symbol)
-                if not unsubscribed:
-                    logger.info("unsubscribe unsuccessful")
-                    return False
+        return True
 
-            return True
-        else:
-            logger.warning("System not conected")
-            return False
 
     async def _unsubscribe_symbol(self, symbol: str) -> bool:
         """Send unsubscription message for a symbol"""
@@ -190,8 +213,9 @@ class WebSocketManager:
             return False
 
 
-    async def get_subscriptions(self, user_id : Optional[str]) -> Set[str]:
+    async def get_subscriptions(self, user_id : Optional[int]) -> Set[str]:
         """Get the set of current subscriptions"""
+        #Not used elsewhere so no locks
         if user_id:
             user_stocks = set()
             #TODO this is computational super inneficient
@@ -206,7 +230,7 @@ class WebSocketManager:
         """Log comprehensive status of all subscriptions and connected users"""
         total_symbols = len(self.active_subscriptions)
         total_users = sum(len(users) for users in self.active_subscriptions.values())
-
+        # no locks as only a snapshot of current instance, not to be used in business logic
         logger.info("=== WebSocket Manager Status ===")
         logger.info("Connection State: %s", self.state.value)
         logger.info("Total Symbols: %s", total_symbols)
@@ -247,8 +271,15 @@ class WebSocketManager:
             if 'data' in data:
                 # Trade data
                 for trade in data['data']:
-                    if self.data_handler:
-                        self.data_handler.add_stock_data(trade)
+                    if self.data_processor:
+                        # Check if the processor has the expected method
+                        if hasattr(self.data_processor, 'add_stock_data'):
+                            self.data_processor.add_stock_data(trade)
+                        elif hasattr(self.data_processor, 'add_trade_data'):
+                            self.data_processor.add_trade_data(trade)
+                        elif callable(self.data_processor):
+                            # If it's just a callable, call it directly
+                            self.data_processor(trade)
 
             elif 'type' in data:
                 # Control messages
