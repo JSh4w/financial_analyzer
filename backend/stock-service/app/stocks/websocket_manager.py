@@ -116,7 +116,7 @@ class WebSocketManager:
                     self.state = ConnectionState.DISCONNECTED
                 self.websocket = None
             except Exception as e:
-                logger.WARNING("Issue when diconnecting Webscocket %s,"e)
+                logger.WARNING("Issue when diconnecting Webscocket %s",e)
         else:
             logger.info("Not connected")
         logger.info("Disconnected from WebSocket")
