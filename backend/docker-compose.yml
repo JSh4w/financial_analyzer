@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   stock-service:
     build:
@@ -7,6 +5,8 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8001:8001"
+    env_file:
+      - ./stock-service/.env
     environment:
       - FINNHUB_API_KEY=${FINNHUB_API_KEY}
     volumes:
@@ -24,6 +24,8 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8002:8002"
+    env_file:
+      - ./portfolio-service/.env
     environment:
       - DATABASE_URL=${SUPABASE_DATABASE_URL}
       - SUPABASE_URL=${SUPABASE_URL}
@@ -34,3 +36,6 @@ services:
       timeout: 10s
       retries: 3
     restart: unless-stopped
+
+volumes:
+  pip_cache:
