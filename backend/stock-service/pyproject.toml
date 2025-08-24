@@ -17,9 +17,11 @@ pydantic = "^2.11.7"
 pydantic-settings = "^2.10.1"
 httpx = "^0.28.1"
 python-dotenv = "^1.0.0"
+click = "^8.1.7"
 
 [tool.poetry.group.dev.dependencies]
-pytest = "7.4.0"
+pytest = "^8.0.0"
+pytest-asyncio = "^0.23.0"
 uvicorn = {extras = ["standard"], version = "0.23.2"}
 watchfiles = "^0.21.0"
 
