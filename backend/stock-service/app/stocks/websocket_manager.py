@@ -8,7 +8,8 @@ import logging
 from enum import Enum
 import websockets
 
-from app.stocks.market_data_handler import TradeDataHandler
+#from app.stocks.market_data_handler import TradeDataHandler
+from app.stocks.data_aggregator import TradeDataAggregator
 from app.config import Settings
 
 settings = Settings()
@@ -21,13 +22,6 @@ class SubscriptionRequest:
     symbol: str
     user_id: Optional[int] = None  # For tracking/logging
 
-@dataclass
-class MarketMessage:
-    """Message containing market data"""
-    symbol: str
-    data: dict
-    timestamp: float
-
 class ConnectionState(Enum):
     """Enum for upstream connection state"""
     DISCONNECTED = "disconnected"
@@ -39,7 +33,7 @@ class ConnectionState(Enum):
 class WebSocketManager:
     """ Manages Websocket connections with dynamic subscriptions
     allowing scope for multiple users"""
-    def __init__(self, data_processor: Optional[Callable] = None, storage_dict : Dict = None):
+    def __init__(self, data_processor: Optional[Callable] = None):
         self.finnhub_api_key = settings.FINNHUB_API_KEY
         if not self.finnhub_api_key:
             raise ValueError("FINNHUB_API_KEY variable is required")
@@ -63,8 +57,7 @@ class WebSocketManager:
         self.queueing_task: Optional[asyncio.Task] = None
 
         # Use provided data processor or default to TradeDataHandler
-        self.data_processor = data_processor or TradeDataHandler(storage_dict)
-
+        self.data_processor = data_processor or TradeDataAggregator
 
 
     async def connect(self):
@@ -97,11 +90,11 @@ class WebSocketManager:
                 if not success:
                     failed_symbols.append(symbol)
             if failed_symbols:
-                logger.warning("Failed to resubsrcibe to symbols: %s ", failed_symbols)
+                logger.warning("Failed to resubsribe to symbols: %s ", failed_symbols)
             return True
 
         except Exception as e:
-            logger.error("COnnection failked %s",e)
+            logger.error("Connection failed %s",e)
             async with self._state_lock:
                 self.state = ConnectionState.DISCONNECTED
                 self.websocket = None
@@ -273,10 +266,10 @@ class WebSocketManager:
                 for trade in data['data']:
                     if self.data_processor:
                         # Check if the processor has the expected method
-                        if hasattr(self.data_processor, 'add_stock_data'):
+                        if hasattr(self.data_processor, 'add_tick'):
+                            self.data_processor.add_tick(trade)
+                        elif hasattr(self.data_processor, 'add_stock_data'):
                             self.data_processor.add_stock_data(trade)
-                        elif hasattr(self.data_processor, 'add_trade_data'):
-                            self.data_processor.add_trade_data(trade)
                         elif callable(self.data_processor):
                             # If it's just a callable, call it directly
                             self.data_processor(trade)

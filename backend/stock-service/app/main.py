@@ -26,8 +26,7 @@ GLOBAL_WS_MANAGER = None
 
 async def connect_to_websocket_manager():
     """Connect to the WebSocketManager and return it started"""
-    temp_storage = {}
-    ws_manager = WebSocketManager(storage_dict=temp_storage)
+    ws_manager = WebSocketManager()
     try:
         await ws_manager.start()
         print("websocket manager started")
