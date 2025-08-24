@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
+import pytest
 import asyncio
 import logging
-from app.websocket_manager import WebSocketManager
+from app.stocks.websocket_manager import WebSocketManager
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 
-async def main():
+@pytest.mark.asyncio
+async def test_main():
     """Test for handling websocket and data storage - full integration test/ init for backend"""
     # Create WebSocket manager
-    temp_storage = {}
-    ws_manager = WebSocketManager(storage_dict=temp_storage)
+    ws_manager = WebSocketManager()
 
     try:
         # Start the manager
@@ -18,46 +19,34 @@ async def main():
         print("WebSocket manager started")
 
         # # Wait a moment for connection
-        await asyncio.sleep(2)
+        await asyncio.sleep(1)
 
         # # Queue a subscription
         print("Queuing subscription for AAPL, user 123")
         await ws_manager.enqueue_subscription("AAPL", 123)
 
         # # Wait for it to process
-        await asyncio.sleep(2)
-
-        print(ws_manager.data_handler.storage)
-
-        await asyncio.sleep(2)
-
+        await asyncio.sleep(1)
         # # Log current status
         await ws_manager.log_current_status()
 
         await ws_manager.enqueue_subscription("MSFT", 123)
 
-
         # # Keep running for a bit to see data
-        # print("Listening for data for 10 seconds...")
-        await asyncio.sleep(5)
-        print(ws_manager.data_handler.storage)
+        # print("Listening fr data for 10 seconds...")
+        await asyncio.sleep(0.5)
 
         await ws_manager.log_current_status()
 
-        await asyncio.sleep(2)
+        await asyncio.sleep(1)
 
         await ws_manager.enqueue_unsubscription("AAPL", 123)
 
-        await asyncio.sleep(2)
+        await asyncio.sleep(1)
 
-        await asyncio.sleep(5)
-
-        ws_manager.data_handler.pickle_storage()
-
-        await asyncio.sleep(2)
         await ws_manager.log_current_status()
 
-        await asyncio.sleep(2)
+        await asyncio.sleep(1)
 
     finally:
         await ws_manager.stop()

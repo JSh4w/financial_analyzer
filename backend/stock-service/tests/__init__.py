@@ -1,0 +1,1 @@
+"""Test package for stock-service"""
