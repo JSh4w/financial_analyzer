@@ -1,5 +1,5 @@
 """Processes tick data on a per symbol basis"""
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
 from models.websocket_models import TradeData
 
@@ -23,23 +23,15 @@ class StockHandler():
             return
 
         minute_stamp = timestamp - (timestamp % 60000)
-        # Update existing candle or create new one
-        if minute_stamp not in self._ohlcv:
-            # First trade for this minute - initialize all fields
-            self._ohlcv[minute_stamp] = {
-                'high': price,
-                'low': price,
-                'open': price,
-                'close': price,
-                'volume': volume
-            }
-        else:
-            # Update existing candle
-            candle = self._ohlcv[minute_stamp]
-            candle['high'] = max(candle['high'], price)
-            candle['low'] = min(candle['low'], price)
-            candle['volume'] += volume
-            candle['close'] = price
+        # Update existing candle
+        candle = self._ohlcv.setdefault(minute_stamp, {
+            'high':price, 'low':price, 'open':price,
+            'close':price, 'volume':0,
+            }) # reference to dictionary
+        candle['high'] = max(candle['high'], price)
+        candle['low'] = min(candle['low'], price)
+        candle['volume'] += volume
+        candle['close'] = price
 
     def update_duckdb(self, trade_data: TradeData):
         """Place holder for data persistancy"""
@@ -54,12 +46,3 @@ class StockHandler():
     def candle_data(self):
         "OHLCV data"
         return self._ohlcv
-    
-    @property
-    def _current_candle(self):
-        "Current candle data (for testing compatibility)"
-        if self._ohlcv:
-            # Return the most recent candle
-            latest_timestamp = max(self._ohlcv.keys())
-            return self._ohlcv[latest_timestamp]
-        return None

@@ -13,7 +13,8 @@ class TestTradeDataAggregator:
     @pytest.fixture
     def aggregator(self):
         """Create a fresh aggregator for each test"""
-        return TradeDataAggregator()
+        test_queue = asyncio.Queue(500)
+        return TradeDataAggregator(input_queue=test_queue)
 
     @pytest.fixture
     def mock_callback(self):
@@ -49,7 +50,8 @@ class TestTradeDataAggregator:
     def test_aggregator_with_callback(self):
         """Test aggregator with callback function"""
         mock_callback = Mock()
-        aggregator = TradeDataAggregator(callback=mock_callback)
+        test_queue = asyncio.Queue(500)
+        aggregator = TradeDataAggregator(callback=mock_callback, input_queue=test_queue)
         assert aggregator.callback == mock_callback
 
     def test_create_trade_data_factory_dict(self, aggregator, sample_trade_data):
@@ -74,23 +76,24 @@ class TestTradeDataAggregator:
         assert trade_data.s == 'GOOGL'
 
     @pytest.mark.asyncio
-    async def test_add_tick_queues_data(self, aggregator, sample_trade_data):
-        """Test that add_tick properly queues trade data"""
+    async def test_queue_data_directly(self, aggregator, sample_trade_data):
+        """Test that data can be queued directly for processing"""
         dict_data = sample_trade_data['dict_format']
 
         # Queue should be empty initially
         assert aggregator.queue.qsize() == 0
 
-        # Add tick data
-        await aggregator.add_tick(dict_data)
+        # Add data directly to queue
+        await aggregator.queue.put(dict_data)
 
         # Queue should have one item
         assert aggregator.queue.qsize() == 1
 
-        # Get the queued item
-        queued_trade = await aggregator.queue.get()
-        assert isinstance(queued_trade, TradeData)
-        assert queued_trade.s == 'AAPL'
+        # Get the queued item - it will be processed by create_trade_data
+        queued_data = await aggregator.queue.get()
+        trade_data = aggregator.create_trade_data(queued_data)
+        assert isinstance(trade_data, TradeData)
+        assert trade_data.s == 'AAPL'
 
     @pytest.mark.asyncio
     async def test_process_tick_queue_creates_handlers(self, aggregator):
@@ -104,12 +107,13 @@ class TestTradeDataAggregator:
 
         # Queue the trades
         for trade in test_trades:
-            await aggregator.add_tick(trade)
+            await aggregator.queue.put(trade)
 
         # Process a few trades manually (since we can't run infinite loop in test)
         for _ in range(3):
             if aggregator.queue.qsize() > 0:
-                trade_data = await aggregator.queue.get()
+                input_data = await aggregator.queue.get()
+                trade_data = aggregator.create_trade_data(input_data)
                 symbol = trade_data.s
 
                 if symbol not in aggregator.stock_handlers:
@@ -127,13 +131,15 @@ class TestTradeDataAggregator:
     async def test_callback_execution(self):
         """Test that callback is executed when processing trades"""
         mock_callback = Mock()
-        aggregator = TradeDataAggregator(callback=mock_callback)
+        test_queue = asyncio.Queue(500)
+        aggregator = TradeDataAggregator(callback=mock_callback, input_queue=test_queue)
 
         trade_data = TradeData(s='AAPL', p=150.0, t=1640995200000, v=100, c=[])
-        await aggregator.add_tick(trade_data)
+        await aggregator.queue.put(trade_data)
 
         # Manually process one trade
-        queued_trade = await aggregator.queue.get()
+        queued_data = await aggregator.queue.get()
+        queued_trade = aggregator.create_trade_data(queued_data)
 
         # Simulate what process_tick_queue does
         symbol = queued_trade.s
@@ -159,7 +165,7 @@ class TestTradeDataAggregator:
 
         # Queue all trades
         for trade in trades:
-            await aggregator.add_tick(trade.data_to_dict())
+            await aggregator.queue.put(trade.data_to_dict())
 
         initial_queue_size = aggregator.queue.qsize()
         assert initial_queue_size > 0
@@ -170,7 +176,8 @@ class TestTradeDataAggregator:
 
         for _ in range(max_process):
             if aggregator.queue.qsize() > 0:
-                trade_data = await aggregator.queue.get()
+                input_data = await aggregator.queue.get()
+                trade_data = aggregator.create_trade_data(input_data)
                 symbol = trade_data.s
 
                 if symbol not in aggregator.stock_handlers:
@@ -192,7 +199,7 @@ class TestTradeDataAggregator:
 
         # Queue all burst trades
         for trade in burst_trades:
-            await aggregator.add_tick(trade.data_to_dict())
+            await aggregator.queue.put(trade.data_to_dict())
 
         process_task = asyncio.create_task(aggregator.process_tick_queue())
         await asyncio.sleep(0.5)
@@ -253,7 +260,7 @@ class TestTradeDataAggregator:
 
         # Queue all data
         for data in mixed_data:
-            await aggregator.add_tick(data)
+            await aggregator.queue.put(data)
 
         # Process all
         symbols_processed = set()
@@ -261,7 +268,8 @@ class TestTradeDataAggregator:
         max_iterations = 100  # Safety limit
         
         while aggregator.queue.qsize() > 0 and processed_count < max_iterations:
-            trade_data = await aggregator.queue.get()
+            input_data = await aggregator.queue.get()
+            trade_data = aggregator.create_trade_data(input_data)
             symbol = trade_data.s
             symbols_processed.add(symbol)
 
@@ -288,7 +296,8 @@ async def test_realistic_market_simulation():
     def track_callback(trade_data):
         processed_trades.append(trade_data)
 
-    aggregator = TradeDataAggregator(callback=track_callback)
+    test_queue = asyncio.Queue(500)
+    aggregator = TradeDataAggregator(callback=track_callback, input_queue=test_queue)
 
     # Generate realistic market data
     generator = SyntheticDataGenerator(['AAPL', 'GOOGL', 'MSFT', 'AMZN', 'TSLA'])
@@ -296,14 +305,15 @@ async def test_realistic_market_simulation():
 
     # Queue all trades
     for trade in market_trades:
-        await aggregator.add_tick(trade.data_to_dict())
+        await aggregator.queue.put(trade.data_to_dict())
 
     # Process trades (simulate running process_tick_queue)
     start_queue_size = aggregator.queue.qsize()
     processed_count = 0
 
     while aggregator.queue.qsize() > 0 and processed_count < 200:  # Limit for test
-        trade_data = await aggregator.queue.get()
+        input_data = await aggregator.queue.get()
+        trade_data = aggregator.create_trade_data(input_data)
         symbol = trade_data.s
 
         if symbol not in aggregator.stock_handlers:

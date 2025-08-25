@@ -33,7 +33,7 @@ class ConnectionState(Enum):
 class WebSocketManager:
     """ Manages Websocket connections with dynamic subscriptions
     allowing scope for multiple users"""
-    def __init__(self, data_processor: Optional[Callable] = None):
+    def __init__(self, output_queue = asyncio.Queue(maxsize = 500)):
         self.finnhub_api_key = settings.FINNHUB_API_KEY
         if not self.finnhub_api_key:
             raise ValueError("FINNHUB_API_KEY variable is required")
@@ -45,7 +45,7 @@ class WebSocketManager:
         self._subscription_lock = asyncio.Lock()
 
         self.subscription_queue = asyncio.Queue(maxsize = 20)
-        self.message_queue = asyncio.Queue(maxsize = 100)
+        self.output_queue = output_queue
 
         self.active_subscriptions :  Dict[str , List[int]] = {}
         self.subscription_task : Optional[asyncio.Task] = None
@@ -55,9 +55,6 @@ class WebSocketManager:
 
         self.connection_task: Optional[asyncio.Task] = None
         self.queueing_task: Optional[asyncio.Task] = None
-
-        # Use provided data processor or default to TradeDataHandler
-        self.data_processor = data_processor or TradeDataAggregator
 
 
     async def connect(self):
@@ -264,15 +261,8 @@ class WebSocketManager:
             if 'data' in data:
                 # Trade data
                 for trade in data['data']:
-                    if self.data_processor:
-                        # Check if the processor has the expected method
-                        if hasattr(self.data_processor, 'add_tick'):
-                            self.data_processor.add_tick(trade)
-                        elif hasattr(self.data_processor, 'add_stock_data'):
-                            self.data_processor.add_stock_data(trade)
-                        elif callable(self.data_processor):
-                            # If it's just a callable, call it directly
-                            self.data_processor(trade)
+                    if self.output_queue:
+                        self.output_queue.put(trade)
 
             elif 'type' in data:
                 # Control messages
@@ -305,7 +295,7 @@ class WebSocketManager:
                     break
             except Exception as e:
                 logger.error("error occured %s",e)
-                break
+                break#
 
     async def start(self):
         """Start the WebSocket manager"""

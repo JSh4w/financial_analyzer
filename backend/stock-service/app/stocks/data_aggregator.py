@@ -12,8 +12,8 @@ logger = logging.getLogger(__name__)
 class TradeDataAggregator:
     """Buffers websocket trade data and routes to synchronous StockHandler instances"""
 
-    def __init__(self, callback: Optional[Callable] = None):
-        self.queue = asyncio.Queue(500)  # Buffer for 50 stocks
+    def __init__(self, callback: Optional[Callable] = None, input_queue = asyncio.Queue(500)):
+        self.queue = input_queue  # Buffer for 50 stocks
         self.callback = callback
         self.stock_handlers: Dict[str, StockHandler] = {}
         self.SHUTDOWN_SENTINAL = object()
@@ -34,18 +34,16 @@ class TradeDataAggregator:
             c=getattr(websocket_data, 'c', websocket_data.get('c', []))
         )
 
-    async def add_tick(self, tick_data):
-        """Queue trade data from websocket (async I/O operation)"""
-        trade_data = self.create_trade_data(tick_data)
-        await self.queue.put(trade_data)
-
     async def process_tick_queue(self):
         """Process queued trades - async for I/O, calls sync StockHandlers"""
         while True:
-            trade_data = await self.queue.get() #this releases control
-            if trade_data == self.SHUTDOWN_SENTINAL:
+            input_data = await self.queue.get() #this releases control
+            if input_data == self.SHUTDOWN_SENTINAL:
                 break
+            #convert data
+            trade_data = self.create_trade_data(input_data)
             symbol = trade_data.s
+
 
             # Create StockHandler if needed (sync operation)
             self.stock_handlers.setdefault(symbol, StockHandler(symbol))
