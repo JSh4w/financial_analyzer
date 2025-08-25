@@ -1,15 +1,16 @@
 """Processes tick data on a per symbol basis"""
-from typing import Dict, Any
+from typing import Dict, Any, Optional, Callable
 
 from models.websocket_models import TradeData
 
 
 class StockHandler():
     """Handles individual stock"""
-    def __init__(self, symbol: str, db=None):
+    def __init__(self, symbol: str, db=None, on_update_callback: Optional[Callable] = None):
         self._symbol = symbol
         self._ohlcv: Dict[int, Dict[str, Any]] = {}  # daily timestamp -> OHLCV data
         self.db = db
+        self.on_update_callback = on_update_callback
 
     def process_trade(self, trade_data: TradeData):
         """Takes current trade and aggregates over daily intervals aligned with UTC
@@ -32,6 +33,10 @@ class StockHandler():
         candle['low'] = min(candle['low'], price)
         candle['volume'] += volume
         candle['close'] = price
+        
+        # Trigger update callback if set
+        if self.on_update_callback:
+            self.on_update_callback(self._symbol, self._ohlcv)
 
     def update_duckdb(self, trade_data: TradeData):
         """Place holder for data persistancy"""

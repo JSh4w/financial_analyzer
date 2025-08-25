@@ -262,7 +262,7 @@ class WebSocketManager:
                 # Trade data
                 for trade in data['data']:
                     if self.output_queue:
-                        self.output_queue.put(trade)
+                        await self.output_queue.put(trade)
 
             elif 'type' in data:
                 # Control messages
