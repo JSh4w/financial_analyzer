@@ -1,20 +1,16 @@
 """Pytest configuration and shared fixtures"""
-import pytest
-import asyncio
+import logging
 import sys
-import os
 from pathlib import Path
-
+import pytest
 # Add the backend directory to Python path for imports
 backend_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(backend_dir))
-
 
 @pytest.fixture
 def sample_symbols():
     """Common symbols for testing"""
     return ["AAPL", "GOOGL", "MSFT", "AMZN", "TSLA"]
-
 
 @pytest.fixture
 def base_timestamp():

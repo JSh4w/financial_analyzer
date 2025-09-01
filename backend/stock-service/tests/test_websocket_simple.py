@@ -1,14 +1,13 @@
-#!/usr/bin/env python3
-import pytest
+"""Testing Websocket Functionality with finnhub API"""
 import asyncio
-import logging
+import pytest
 from app.stocks.websocket_manager import WebSocketManager
+import logging
 
-# Setup logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 
 @pytest.mark.asyncio
-async def test_main():
+async def test_main(caplog):
     """Test for handling websocket and data storage - full integration test/ init for backend"""
     # Create WebSocket manager
     ws_manager = WebSocketManager()
@@ -19,7 +18,7 @@ async def test_main():
         print("WebSocket manager started")
 
         # # Wait a moment for connection
-        await asyncio.sleep(1)
+        #await asyncio.sleep(1)
 
         # # Queue a subscription
         print("Queuing subscription for AAPL, user 123")
@@ -48,11 +47,10 @@ async def test_main():
 
         await asyncio.sleep(1)
 
+        # The fixture will automatically check for ERROR logs after the test
+        if errors := [f"{r.name}: {r.levelname}: {r.message}" 
+                    for r in caplog.records if r.levelno >= logging.ERROR]:
+            pytest.fail(f"Test failed due to ERROR logs: {errors}")
+
     finally:
         await ws_manager.stop()
-
-if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        print("Graceful shutdown completed")

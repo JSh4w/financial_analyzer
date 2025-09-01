@@ -50,8 +50,8 @@ class WebSocketManager:
         self.active_subscriptions :  Dict[str , List[int]] = {}
         self.subscription_task : Optional[asyncio.Task] = None
 
-        self.max_reconnect_attempts = 5
-        self.reconnect_delay = 5
+        self.max_reconnect_attempts = 3
+        self.reconnect_delay = 2
 
         self.connection_task: Optional[asyncio.Task] = None
         self.queueing_task: Optional[asyncio.Task] = None
@@ -59,6 +59,7 @@ class WebSocketManager:
 
     async def connect(self):
         """Try connecting to Finnhub, return if connected"""
+        logger.info("Attempting to connect to WebSocket")
         async with self._state_lock:
             if self.state == ConnectionState.CONNECTED:
                 return True # Exit True no need to change anything
@@ -67,13 +68,13 @@ class WebSocketManager:
             if self.state == ConnectionState.SHUTTING_DOWN:
                 return False # Dont try and start during shutdown
 
-            # If reconnecting or disconnecting I want to process
+            # If reconnecting or disconnecting I want to proceed
             self.state = ConnectionState.CONNECTING
 
         try:
             uri = f"wss://ws.finnhub.io?token={self.finnhub_api_key}"
-            self.websocket = await websockets.connect(uri)
             async with self._state_lock:
+                self.websocket = await websockets.connect(uri)
                 self.state = ConnectionState.CONNECTED
             logger.info("Connected to Finnhub WebSocket")
 
@@ -89,7 +90,14 @@ class WebSocketManager:
             if failed_symbols:
                 logger.warning("Failed to resubsribe to symbols: %s ", failed_symbols)
             return True
-
+        except websockets.exceptions.InvalidStatus as e:
+            logger.error("Connection failed, possible due to an invalid key: %s",e)
+            if self.finnhub_api_key == "demo_key":
+                logger.error("Using demo key, see config to update to valid key")
+            async with self._state_lock:
+                self.state = ConnectionState.DISCONNECTED
+                self.websocket = None
+            return False
         except Exception as e:
             logger.error("Connection failed %s",e)
             async with self._state_lock:
@@ -288,14 +296,19 @@ class WebSocketManager:
                     #logger.info("Processing messagge %s",message)
                     await self._process_message(message)
 
-            except websockets.exceptions.ConnectionClosed:
-                logger.warning("Connection lost, attempting reconnect...")
+            except (websockets.exceptions.ConnectionClosed,
+                    websockets.exceptions.InvalidURI,
+                    websockets.exceptions.WebSocketException,
+                    asyncio.TimeoutError) as e:
+                logger.warning("Connection issue (%s), attempting reconnect...", type(e).__name__)
                 if not await self._auto_reconnect():
                     logger.error("Reconnection failed, stopping listener")
                     break
             except Exception as e:
-                logger.error("error occured %s",e)
-                break#
+                logger.error("Unexpected error (%s: %s), attempting reconnect...", type(e).__name__, e)
+                if not await self._auto_reconnect():
+                    logger.error("Reconnection failed, stopping listener")
+                    break
 
     async def start(self):
         """Start the WebSocket manager"""
