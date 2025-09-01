@@ -15,6 +15,7 @@ from app.config import Settings
 from app.stocks.websocket_manager import WebSocketManager
 from app.stocks.data_aggregator import TradeDataAggregator
 from app.stocks.market_data_handler import TradeDataHandler
+from app.database.duckdb_manager import DuckDBManager
 #from app.subscription_routes import router as subscription_router
 from core.logging import setup_logging
 
@@ -29,6 +30,7 @@ settings = Settings()
 # Global instances
 GLOBAL_WS_MANAGER = None
 GLOBAL_DATA_AGGREGATOR = None
+GLOBAL_DB_MANAGER = None
 
 # SSE connection management
 active_sse_connections: Dict[str, List[asyncio.Queue]] = {}
@@ -88,16 +90,23 @@ async def connect_to_websocket_manager(output_queue=None):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """FastAPI lifespan manager - startup and shutdown events"""
-    global GLOBAL_WS_MANAGER, GLOBAL_DATA_AGGREGATOR
+    global GLOBAL_WS_MANAGER, GLOBAL_DATA_AGGREGATOR, GLOBAL_DB_MANAGER
 
     # STARTUP: Initialize components when app starts
     print("Starting application components...")
     
+    # Initialize database manager
+    GLOBAL_DB_MANAGER = DuckDBManager("data/stock_data.duckdb")
+    
     # Create shared queue for WebSocket -> Aggregator communication
     shared_queue = asyncio.Queue(500)
     
-    # Initialize data aggregator with the shared queue and broadcast callback
-    GLOBAL_DATA_AGGREGATOR = TradeDataAggregator(input_queue=shared_queue, broadcast_callback=broadcast_update)
+    # Initialize data aggregator with all components
+    GLOBAL_DATA_AGGREGATOR = TradeDataAggregator(
+        input_queue=shared_queue, 
+        broadcast_callback=broadcast_update,
+        db_manager=GLOBAL_DB_MANAGER
+    )
     
     # Start processing task
     asyncio.create_task(GLOBAL_DATA_AGGREGATOR.process_tick_queue())
@@ -116,6 +125,10 @@ async def lifespan(app: FastAPI):
     if GLOBAL_WS_MANAGER:
         await GLOBAL_WS_MANAGER.stop()
         GLOBAL_WS_MANAGER = None
+    
+    if GLOBAL_DB_MANAGER:
+        GLOBAL_DB_MANAGER.close()
+        GLOBAL_DB_MANAGER = None
 
 app = FastAPI(
     title="Stock Market Data Service",
@@ -324,6 +337,64 @@ async def stream_stock_data(symbol: str):
             "Connection": "keep-alive",
         }
     )
+
+# Database Management Endpoints
+@app.get("/database/stats")
+async def get_database_stats():
+    """Get database statistics for all symbols"""
+    global GLOBAL_DB_MANAGER
+    
+    if GLOBAL_DB_MANAGER is None:
+        raise HTTPException(status_code=503, detail="Database manager not running")
+    
+    try:
+        stats = GLOBAL_DB_MANAGER.get_symbols_stats()
+        return {
+            "stats": [
+                {
+                    "symbol": row[0],
+                    "candle_count": row[1],
+                    "first_candle": row[2],
+                    "last_candle": row[3],
+                    "last_updated": str(row[4])
+                }
+                for row in stats
+            ],
+            "total_symbols": len(stats)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+@app.get("/database/export/{symbol}")
+async def export_symbol_data(symbol: str):
+    """Export symbol data to parquet file"""
+    global GLOBAL_DB_MANAGER
+    
+    if GLOBAL_DB_MANAGER is None:
+        raise HTTPException(status_code=503, detail="Database manager not running")
+    
+    try:
+        output_file = GLOBAL_DB_MANAGER.export_to_parquet(symbol.upper())
+        if output_file:
+            return {"message": f"Data exported successfully", "file": output_file}
+        else:
+            raise HTTPException(status_code=500, detail="Export failed")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Export error: {str(e)}")
+
+@app.get("/database/candle_count/{symbol}")
+async def get_candle_count(symbol: str):
+    """Get candle count for a specific symbol"""
+    global GLOBAL_DB_MANAGER
+    
+    if GLOBAL_DB_MANAGER is None:
+        raise HTTPException(status_code=503, detail="Database manager not running")
+    
+    try:
+        count = GLOBAL_DB_MANAGER.get_candle_count(symbol.upper())
+        return {"symbol": symbol.upper(), "candle_count": count}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn

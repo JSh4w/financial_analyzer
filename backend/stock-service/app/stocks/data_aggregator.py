@@ -2,7 +2,6 @@
 from typing import Dict, Optional, Callable
 import logging
 import asyncio
-import json
 import time
 
 from app.stocks.stockHandler import StockHandler
@@ -14,10 +13,16 @@ logger = logging.getLogger(__name__)
 class TradeDataAggregator:
     """Buffers websocket trade data and routes to synchronous StockHandler instances"""
 
-    def __init__(self, callback: Optional[Callable] = None, input_queue = asyncio.Queue(500), broadcast_callback: Optional[Callable] = None):
-        self.queue = input_queue  # Buffer for 50 stocks
+    def __init__(self,
+        callback: Optional[Callable] = None,
+        input_queue = asyncio.Queue(500),
+        broadcast_callback: Optional[Callable] = None,
+        db_manager = None
+    ):
+        self.queue = input_queue  # Buffer for 500 stocks
         self.callback = callback
         self.broadcast_callback = broadcast_callback
+        self.db_manager = db_manager
         self.stock_handlers: Dict[str, StockHandler] = {}
         self.SHUTDOWN_SENTINAL = object()
 
@@ -50,7 +55,11 @@ class TradeDataAggregator:
 
             # Create StockHandler if needed (sync operation)
             handler_callback = self._create_update_callback() if self.broadcast_callback else None
-            self.stock_handlers.setdefault(symbol, StockHandler(symbol, on_update_callback=handler_callback))
+            self.stock_handlers.setdefault(symbol, StockHandler(
+                symbol, 
+                db_manager=self.db_manager,
+                on_update_callback=handler_callback
+            ))
 
             # Process trade (sync OHLCV computation)
             self.stock_handlers[symbol].process_trade(trade_data)
