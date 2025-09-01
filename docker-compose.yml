@@ -13,7 +13,6 @@ services:
   #     - ENV=development
   #   depends_on:
   #     - python-service
-  #     - postgres
 
   python-service:
     build:
