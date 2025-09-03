@@ -1,11 +1,9 @@
-import os
+"""Main backend application using FastAPI for stock analysis"""
 import json
 import asyncio
-from datetime import datetime
 from contextlib import asynccontextmanager
-from symtable import Symbol
+from logging import getLogger
 from typing import Dict, List
-import websockets
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,16 +12,13 @@ from fastapi.responses import StreamingResponse
 from app.config import Settings
 from app.stocks.websocket_manager import WebSocketManager
 from app.stocks.data_aggregator import TradeDataAggregator
-from app.stocks.market_data_handler import TradeDataHandler
 from app.database.duckdb_manager import DuckDBManager
-#from app.subscription_routes import router as subscription_router
 from core.logging import setup_logging
 
 
 setup_logging(level="DEBUG")
-
+logger = getLogger(__name__)
 load_dotenv()
-latest_data = {"message": "No data received yet", "timestamp": None}
 
 settings = Settings()
 
@@ -67,7 +62,7 @@ def broadcast_update(update_data: dict):
             except Exception:
                 # Mark for removal if any other error
                 dead_queues.append(queue)
-        
+
         # Clean up dead connections
         for dead_queue in dead_queues:
             try:
@@ -93,24 +88,24 @@ async def lifespan(app: FastAPI):
     global GLOBAL_WS_MANAGER, GLOBAL_DATA_AGGREGATOR, GLOBAL_DB_MANAGER
 
     # STARTUP: Initialize components when app starts
-    print("Starting application components...")
-    
+    logger.info("Starting application components...")
+
     # Initialize database manager
     GLOBAL_DB_MANAGER = DuckDBManager("data/stock_data.duckdb")
-    
-    # Create shared queue for WebSocket -> Aggregator communication
+
+    # Websocket queue, max number of stocks
     shared_queue = asyncio.Queue(500)
-    
+
     # Initialize data aggregator with all components
     GLOBAL_DATA_AGGREGATOR = TradeDataAggregator(
-        input_queue=shared_queue, 
+        input_queue=shared_queue,
         broadcast_callback=broadcast_update,
         db_manager=GLOBAL_DB_MANAGER
     )
-    
+
     # Start processing task
     asyncio.create_task(GLOBAL_DATA_AGGREGATOR.process_tick_queue())
-    
+
     # Initialize WebSocket manager with the shared queue
     GLOBAL_WS_MANAGER = await connect_to_websocket_manager(output_queue=shared_queue)
 
@@ -121,11 +116,11 @@ async def lifespan(app: FastAPI):
     if GLOBAL_DATA_AGGREGATOR:
         await GLOBAL_DATA_AGGREGATOR.shutdown()
         GLOBAL_DATA_AGGREGATOR = None
-    
+
     if GLOBAL_WS_MANAGER:
         await GLOBAL_WS_MANAGER.stop()
         GLOBAL_WS_MANAGER = None
-    
+
     if GLOBAL_DB_MANAGER:
         GLOBAL_DB_MANAGER.close()
         GLOBAL_DB_MANAGER = None
@@ -147,21 +142,10 @@ app.add_middleware(
 
 #app.include_router(subscription_router)
 
-@app.get("/")
-def root():
-    return {"message": "Stock Market Data Service", "service": "stock-service"}
-
 @app.get("/health")
 def health_check():
+    """Check if application is running"""
     return {"status": "healthy", "service": "stock-service", "environment": "production"}
-
-@app.get("/apple")
-def get_stock_data():
-    return latest_data
-
-@app.post("/test_post")
-def test_post():
-    return {"message": "Test post successful"}
 
 @app.get("/ws_manager/{symbol}")
 async def subscribe_to_apple(symbol : str):
@@ -187,51 +171,23 @@ async def unsubscribe_from_apple():
 
     try:
         await GLOBAL_WS_MANAGER.enqueue_unsubscription("AAPL", 123)
-        return {"message": "Unsubscribed from AAPL successfully", "status": "unsubscribed", "symbol": "AAPL"}
-    except Exception as e:
-        return {"message": f"Failed to unsubscribe from AAPL: {str(e)}", "status": "error"}
-
-@app.get("/ws_manager/status")
-async def get_websocket_manager_status():
-    """Get the status of the WebSocket manager"""
-    global GLOBAL_WS_MANAGER
-
-    if GLOBAL_WS_MANAGER is None:
-        return {"status": "stopped", "message": "WebSocket manager is not running"}
-
-    try:
-        # Get current data from the manager
-        storage_data = GLOBAL_WS_MANAGER.data_handler.storage if hasattr(GLOBAL_WS_MANAGER, 'data_handler') else {}
         return {
-            "status": "running",
-            "message": "WebSocket manager is active",
-            "data": storage_data
+        "message": "Unsubscribed from AAPL successfully",
+        "status": "unsubscribed", 
+        "symbol": "AAPL",
         }
     except Exception as e:
-        return {"status": "error", "message": f"Error getting status: {str(e)}"}
-
-@app.get("/ws_manager/data")
-async def get_websocket_data():
-    """Get current data from the WebSocket manager"""
-    global GLOBAL_WS_MANAGER
-
-    if GLOBAL_WS_MANAGER is None:
-        return {"error": "WebSocket manager is not running"}
-
-    try:
-        return GLOBAL_WS_MANAGER.data_handler.storage
-    except Exception as e:
-        return {"error": f"Failed to get data: {str(e)}"}
+        return {"message": f"Failed to unsubscribe from AAPL: {str(e)}", "status": "error"}
 
 # Data Aggregator Endpoints
 @app.get("/aggregator/status")
 async def get_aggregator_status():
     """Get status of the data aggregator"""
     global GLOBAL_DATA_AGGREGATOR
-    
+
     if GLOBAL_DATA_AGGREGATOR is None:
         return {"status": "stopped", "message": "Data aggregator is not running"}
-    
+
     return {
         "status": "running",
         "symbols_tracked": GLOBAL_DATA_AGGREGATOR.get_all_symbols(),
@@ -242,24 +198,24 @@ async def get_aggregator_status():
 async def get_tracked_symbols():
     """Get all symbols being tracked by the aggregator"""
     global GLOBAL_DATA_AGGREGATOR
-    
+
     if GLOBAL_DATA_AGGREGATOR is None:
         return {"error": "Data aggregator is not running"}
-    
+
     return {"symbols": GLOBAL_DATA_AGGREGATOR.get_all_symbols()}
 
 @app.get("/aggregator/data/{symbol}")
 async def get_symbol_data(symbol: str):
     """Get OHLCV data for a specific symbol"""
     global GLOBAL_DATA_AGGREGATOR
-    
+
     if GLOBAL_DATA_AGGREGATOR is None:
         return {"error": "Data aggregator is not running"}
-    
+
     stock_handler = GLOBAL_DATA_AGGREGATOR.get_stock_handler(symbol.upper())
     if stock_handler is None:
         return {"error": f"No data found for symbol {symbol}"}
-    
+
     return {
         "symbol": symbol.upper(),
         "candle_data": stock_handler.candle_data
@@ -269,16 +225,16 @@ async def get_symbol_data(symbol: str):
 async def get_all_aggregated_data():
     """Get OHLCV data for all tracked symbols"""
     global GLOBAL_DATA_AGGREGATOR
-    
+
     if GLOBAL_DATA_AGGREGATOR is None:
         return {"error": "Data aggregator is not running"}
-    
+
     all_data = {}
     for symbol in GLOBAL_DATA_AGGREGATOR.get_all_symbols():
         stock_handler = GLOBAL_DATA_AGGREGATOR.get_stock_handler(symbol)
         if stock_handler:
             all_data[symbol] = stock_handler.candle_data
-    
+
     return {"data": all_data}
 
 # SSE Streaming Endpoints
@@ -286,24 +242,24 @@ async def get_all_aggregated_data():
 async def stream_stock_data(symbol: str):
     """Stream real-time OHLCV data for a symbol via SSE"""
     global GLOBAL_WS_MANAGER, GLOBAL_DATA_AGGREGATOR
-    
+
     symbol = symbol.upper()
-    
+
     # Check if data aggregator is running
     if GLOBAL_DATA_AGGREGATOR is None:
         raise HTTPException(status_code=503, detail="Data aggregator not running")
-    
+
     # Check if symbol is already being tracked (has active WebSocket subscription)
     if symbol not in GLOBAL_DATA_AGGREGATOR.get_all_symbols():
         raise HTTPException(
-            status_code=400, 
+            status_code=400,
             detail=f"Symbol {symbol} not subscribed. Please subscribe via WebSocket first."
         )
-    
+
     # Create SSE queue for this connection
     sse_queue = asyncio.Queue(maxsize=10)
     await add_sse_connection(symbol, sse_queue)
-    
+
     # Send initial data immediately
     stock_handler = GLOBAL_DATA_AGGREGATOR.get_stock_handler(symbol)
     if stock_handler and stock_handler.candle_data:
@@ -313,7 +269,7 @@ async def stream_stock_data(symbol: str):
             "update_timestamp": asyncio.get_event_loop().time()
         }
         await sse_queue.put(initial_data)
-    
+
     async def event_stream():
         try:
             while True:
@@ -328,9 +284,9 @@ async def stream_stock_data(symbol: str):
             # Clean up on any error
             await remove_sse_connection(symbol, sse_queue)
             raise
-    
+
     return StreamingResponse(
-        event_stream(), 
+        event_stream(),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
@@ -343,10 +299,10 @@ async def stream_stock_data(symbol: str):
 async def get_database_stats():
     """Get database statistics for all symbols"""
     global GLOBAL_DB_MANAGER
-    
+
     if GLOBAL_DB_MANAGER is None:
         raise HTTPException(status_code=503, detail="Database manager not running")
-    
+
     try:
         stats = GLOBAL_DB_MANAGER.get_symbols_stats()
         return {
@@ -363,16 +319,16 @@ async def get_database_stats():
             "total_symbols": len(stats)
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}") from e
 
 @app.get("/database/export/{symbol}")
 async def export_symbol_data(symbol: str):
     """Export symbol data to parquet file"""
     global GLOBAL_DB_MANAGER
-    
+
     if GLOBAL_DB_MANAGER is None:
         raise HTTPException(status_code=503, detail="Database manager not running")
-    
+
     try:
         output_file = GLOBAL_DB_MANAGER.export_to_parquet(symbol.upper())
         if output_file:
@@ -380,21 +336,21 @@ async def export_symbol_data(symbol: str):
         else:
             raise HTTPException(status_code=500, detail="Export failed")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Export error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Export error: {str(e)}") from e
 
 @app.get("/database/candle_count/{symbol}")
 async def get_candle_count(symbol: str):
     """Get candle count for a specific symbol"""
     global GLOBAL_DB_MANAGER
-    
+
     if GLOBAL_DB_MANAGER is None:
         raise HTTPException(status_code=503, detail="Database manager not running")
-    
+
     try:
         count = GLOBAL_DB_MANAGER.get_candle_count(symbol.upper())
         return {"symbol": symbol.upper(), "candle_count": count}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}") from e
 
 if __name__ == "__main__":
     import uvicorn
