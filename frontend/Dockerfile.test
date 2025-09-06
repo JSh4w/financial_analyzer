@@ -1,0 +1,13 @@
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Install dependencies
+COPY package.json package-lock.json* ./
+RUN npm ci
+
+# Copy source code
+COPY . .
+
+# Run tests and linting by default
+CMD ["sh", "-c", "npm run lint && echo 'Linting passed! Add test command when tests are available.'"]

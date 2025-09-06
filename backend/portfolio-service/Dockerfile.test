@@ -1,0 +1,27 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    postgresql-client \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Poetry
+RUN pip install poetry
+
+# Copy poetry files
+COPY pyproject.toml poetry.lock* ./
+
+# Configure poetry
+RUN poetry config virtualenvs.create false
+
+# Install dependencies including dev dependencies
+RUN poetry install --with dev
+
+# Copy application code
+COPY . .
+
+# Run tests by default
+CMD ["poetry", "run", "pytest", "tests/", "-v"]

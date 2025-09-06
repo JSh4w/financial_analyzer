@@ -1,0 +1,48 @@
+name: Docker Test & Build
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test-stock-service:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Build and test stock-service
+      run: |
+        cd backend/stock-service
+        docker build -f Dockerfile.test -t stock-service:test .
+        docker run --rm stock-service:test
+
+  test-portfolio-service:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Build and test portfolio-service
+      run: |
+        cd backend/portfolio-service
+        docker build -f Dockerfile.test -t portfolio-service:test .
+        docker run --rm portfolio-service:test
+
+  test-frontend:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Build and test frontend
+      run: |
+        cd frontend
+        docker build -f Dockerfile.test -t frontend:test .
+        docker run --rm frontend:test
+

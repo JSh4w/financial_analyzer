@@ -1,46 +1,47 @@
 
 services:
-  # go-api:
-  #   build: 
-  #     context: ./backend/go-api
-  #     dockerfile: Dockerfile
-  #   ports:
-  #     - "8080:8080"
-  #   volumes:
-  #     - ./backend/go-api:/app
-  #   environment:
-  #     - PYTHON_SERVICE_URL=http://python-service:5000
-  #     - ENV=development
-  #   depends_on:
-  #     - python-service
-
-  python-service:
+  stock-service:
     build:
-      context: ./backend/python-service
+      context: ./backend/stock-service
       dockerfile: Dockerfile
     ports:
-      - "5000:5000"  # Exposed for development
+      - "8001:8001"
     volumes:
-      - ./backend/python-service:/app
-      - pip_cache:/root/.cache/pip  # Cache pip packages
+      - ./backend/stock-service:/app
+      - pip_cache:/root/.cache/pip
+    environment:
+      - ENV=development
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+
+  portfolio-service:
+    build:
+      context: ./backend/portfolio-service
+      dockerfile: Dockerfile
+    ports:
+      - "8002:8002"
+    volumes:
+      - ./backend/portfolio-service:/app
+      - pip_cache:/root/.cache/pip
     environment:
       - DATABASE_URL=${SUPABASE_DATABASE_URL}
       - ENV=development
-    command: uvicorn app.main_test:app --host 0.0.0.0 --port 5000
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8002 --reload
 
-  # frontend:
-  #   build:
-  #     context: ./frontend
-  #     dockerfile: Dockerfile
-  #   ports:
-  #     - "3000:3000"
-  #   volumes:
-  #     - ./frontend:/app
-  #     - /app/node_modules
-  #   environment:
-  #     - VITE_API_URL=http://localhost:8080
-  #   depends_on:
-  #     - python-service
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: dev
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      - VITE_API_URL=http://localhost:8001
+    depends_on:
+      - stock-service
+      - portfolio-service
 
 volumes:
   pip_cache:
