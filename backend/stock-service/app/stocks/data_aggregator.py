@@ -21,26 +21,42 @@ class TradeDataAggregator:
     ):
         self.queue = input_queue  # Buffer for 500 stocks
         self.callback = callback
-        self.broadcast_callback = broadcast_callback
+        self.broadcast_callback = broadcast_callback #updating SSE
         self.db_manager = db_manager
         self.stock_handlers: Dict[str, StockHandler] = {}
         self.SHUTDOWN_SENTINAL = object()
 
     @staticmethod
-    def create_trade_data(websocket_data) -> TradeData:
-        """Factory method to create TradeData instances from websocket data"""
-        if isinstance(websocket_data, dict):
-            return TradeData.dict_to_data(websocket_data)
+    def create_trade_data(websocket_data) -> Optional[TradeData]:
+        """Factory method to create TradeData instances from Alpaca websocket data"""
         if isinstance(websocket_data, TradeData):
             return websocket_data
-        # Handle raw websocket data structure
-        return TradeData(
-            s=getattr(websocket_data, 's', websocket_data.get('s', None)),
-            p=getattr(websocket_data, 'p', websocket_data.get('p', None)),
-            t=getattr(websocket_data, 't', websocket_data.get('t', None)),
-            v=getattr(websocket_data, 'v', websocket_data.get('v', None)),
-            c=getattr(websocket_data, 'c', websocket_data.get('c', []))
-        )
+
+        if isinstance(websocket_data, dict):
+            # Check for required fields: symbol, price, size, timestamp
+            required_fields = ['S', 'p', 's', 't']
+            if all(field in websocket_data for field in required_fields):
+                try:
+                    return TradeData(
+                        T=websocket_data.get('T', 't'),
+                        S=websocket_data['S'],
+                        i=websocket_data.get('i', 0),
+                        x=websocket_data.get('x', ''),
+                        p=websocket_data['p'],
+                        s=websocket_data['s'],
+                        c=websocket_data.get('c', []),
+                        t=websocket_data['t'],
+                        z=websocket_data.get('z', '')
+                    )
+                except Exception as e:
+                    logger.error("Failed to create TradeData: %s", e)
+                    return None
+            else:
+                logger.warning("Missing required fields (S,p,s,t) in websocket data")
+                return None
+
+        logger.warning("Invalid websocket data format")
+        return None
 
     async def process_tick_queue(self):
         """Process queued trades - async for I/O, calls sync StockHandlers"""
@@ -50,19 +66,25 @@ class TradeDataAggregator:
                 break
             #convert data
             trade_data = self.create_trade_data(input_data)
-            symbol = trade_data.s
-
+            if trade_data is None:
+                continue
+            symbol = trade_data.S
 
             # Create StockHandler if needed (sync operation)
             handler_callback = self._create_update_callback() if self.broadcast_callback else None
             self.stock_handlers.setdefault(symbol, StockHandler(
-                symbol, 
+                symbol,
                 db_manager=self.db_manager,
                 on_update_callback=handler_callback
             ))
 
             # Process trade (sync OHLCV computation)
-            self.stock_handlers[symbol].process_trade(trade_data)
+            self.stock_handlers[symbol].process_trade(
+                price=trade_data.p,
+                volume=trade_data.s,
+                timestamp=trade_data.t,
+                conditions=trade_data.c
+            )
 
             # Optional callback for processed trades
             if self.callback:
@@ -78,7 +100,7 @@ class TradeDataAggregator:
     def get_all_symbols(self) -> list[str]:
         """Get list of all symbols being tracked"""
         return list(self.stock_handlers.keys())
-    
+
     def _create_update_callback(self):
         """Create a callback function for StockHandler updates"""
         def update_callback(symbol: str, candle_data: dict):
@@ -94,9 +116,9 @@ class TradeDataAggregator:
                     self.broadcast_callback(update_data)
                 except Exception as e:
                     logger.error("Error in broadcast callback: %s", e)
-        
+
         return update_callback
-    
+
     async def shutdown(self):
         """Shutdown gracefully"""
         await self.queue.put(self.SHUTDOWN_SENTINAL)

@@ -96,6 +96,7 @@ async def lifespan(app: FastAPI):
     # Websocket queue, max number of stocks
     shared_queue = asyncio.Queue(500)
 
+
     # Initialize data aggregator with all components
     GLOBAL_DATA_AGGREGATOR = TradeDataAggregator(
         input_queue=shared_queue,
@@ -146,6 +147,13 @@ app.add_middleware(
 def health_check():
     """Check if application is running"""
     return {"status": "healthy", "service": "stock-service", "environment": "production"}
+
+@app.get("/ws_manager/status")
+async def status():
+    """Check status of ws_manager"""
+    global GLOBAL_WS_MANAGER
+    output = await GLOBAL_WS_MANAGER.log_current_status()
+    return {"message":f"{output}"}
 
 @app.get("/ws_manager/{symbol}")
 async def subscribe_to_apple(symbol : str):

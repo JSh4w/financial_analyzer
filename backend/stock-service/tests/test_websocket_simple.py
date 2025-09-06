@@ -18,18 +18,18 @@ async def test_main(caplog):
         print("WebSocket manager started")
 
         # # Wait a moment for connection
-        #await asyncio.sleep(1)
+        await asyncio.sleep(1)
 
         # # Queue a subscription
-        print("Queuing subscription for AAPL, user 123")
-        await ws_manager.enqueue_subscription("AAPL", 123)
+        print("Queuing subscription for FAKEPACA, user 123")
+        await ws_manager.enqueue_subscription("FAKEPACA", 123)
 
         # # Wait for it to process
-        await asyncio.sleep(1)
+        await asyncio.sleep(5)
         # # Log current status
         await ws_manager.log_current_status()
 
-        await ws_manager.enqueue_subscription("MSFT", 123)
+        #await ws_manager.enqueue_subscription("MSFT", 123)
 
         # # Keep running for a bit to see data
         # print("Listening fr data for 10 seconds...")
@@ -39,7 +39,7 @@ async def test_main(caplog):
 
         await asyncio.sleep(1)
 
-        await ws_manager.enqueue_unsubscription("AAPL", 123)
+        await ws_manager.enqueue_unsubscription("FAKEPACA", 123)
 
         await asyncio.sleep(1)
 

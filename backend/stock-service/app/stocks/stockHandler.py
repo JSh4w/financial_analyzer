@@ -1,17 +1,16 @@
 """Processes tick data on a per symbol basis"""
-from typing import Dict, Any, Optional, Callable
+from typing import Dict, Any, Optional, Callable, List
 import logging
-
-from models.websocket_models import TradeData
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
 
 class StockHandler():
-    """Handles individual stock"""
+    """Handles individual stock OHLCV aggregation"""
     def __init__(self, symbol: str, db_manager=None, on_update_callback: Optional[Callable] = None):
         self._symbol = symbol
-        self._ohlcv: Dict[int, Dict[str, Any]] = {}  # minute timestamp -> OHLCV data
+        self._ohlcv: Dict[str, Dict[str, Any]] = {}  # minute timestamp -> OHLCV data
         self.db_manager = db_manager
         self.on_update_callback = on_update_callback
         
@@ -27,25 +26,34 @@ class StockHandler():
             self._ohlcv.update({k: v for k, v in recent_candles.items() if k not in self._ohlcv})
             logger.info(f"Loaded {len(recent_candles)} recent candles for {self._symbol}")
 
-    def process_trade(self, trade_data: TradeData):
-        """Takes current trade and aggregates over daily intervals aligned with UTC
-        For smaller storage data is accepted in any order and open and close only reflect
-        the """
-        # Extract trade data from TradeData dataclass
-        price = trade_data.p
-        volume = trade_data.v
-        timestamp = trade_data.t
-        if any(item in (None, 0) for item in [price,volume,timestamp]):
+    def process_trade(self, price: float, volume: int, timestamp: str, conditions: Optional[List[str]] = None):
+        """Takes current trade and aggregates into minute OHLCV candles
+        
+        Args:
+            price: Trade price
+            volume: Trade volume/size
+            timestamp: RFC-3339 formatted timestamp (e.g., "2021-02-22T15:51:44.208Z")
+            conditions: Optional list of trade conditions
+        """
+        if any(item in (None, 0) for item in [price, volume]) or not timestamp:
             return
 
-        # TODO : change ohlcv for open and close to also store timestamp for open and closing
+        # Convert RFC-3339 timestamp to minute-aligned timestamp string
+        try:
+            dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+            # Align to minute boundary
+            minute_aligned_dt = dt.replace(second=0, microsecond=0)
+            minute_timestamp = minute_aligned_dt.isoformat().replace('+00:00', 'Z')
+        except (ValueError, AttributeError) as e:
+            logger.error("Invalid timestamp format: %s, error: %s", timestamp, e)
+            return
 
-        minute_stamp = timestamp - (timestamp % 60000)
         # Update existing candle
-        candle = self._ohlcv.setdefault(minute_stamp, {
-            'high':price, 'low':price, 'open':price,
-            'close':price, 'volume':0,
-            }) # reference to dictionary
+        candle = self._ohlcv.setdefault(minute_timestamp, {
+            'high': price, 'low': price, 'open': price,
+            'close': price, 'volume': 0,
+        })
+        
         candle['high'] = max(candle['high'], price)
         candle['low'] = min(candle['low'], price)
         candle['volume'] += volume
@@ -54,9 +62,9 @@ class StockHandler():
         # Persist to DuckDB immediately
         if self.db_manager:
             # Insert individual trade record
-            self.db_manager.insert_trade(self._symbol, price, volume, timestamp, trade_data.c)
+            self.db_manager.insert_trade(self._symbol, price, volume, timestamp, conditions or [])
             # Update OHLCV candle
-            self.db_manager.upsert_candle(self._symbol, minute_stamp, candle)
+            self.db_manager.upsert_candle(self._symbol, minute_timestamp, candle)
         
         # Trigger update callback if set
         if self.on_update_callback:
@@ -68,16 +76,12 @@ class StockHandler():
             self.db_manager.bulk_upsert_candles(self._symbol, self._ohlcv)
             logger.info(f"Bulk saved {len(self._ohlcv)} candles for {self._symbol}")
 
-    def update_duckdb(self, trade_data: TradeData):
-        """Place holder for data persistancy (deprecated - use save_to_database)"""
-        return trade_data
-
     @property
     def symbol(self):
-        "stock symbol"
+        """Stock symbol"""
         return self._symbol
 
     @property
     def candle_data(self):
-        "OHLCV data"
+        """OHLCV data"""
         return self._ohlcv

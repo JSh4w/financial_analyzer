@@ -30,11 +30,11 @@ class SyntheticDataGenerator:
         self.market_close_hour = 16
         self.market_close_minute = 0
 
-    def generate_single_trade(self, symbol: str, timestamp: int = None, 
+    def generate_single_trade(self, symbol: str, timestamp: str = None, 
                             price_volatility: float = 0.02) -> TradeData:
         """Generate a single realistic trade"""
         if timestamp is None:
-            timestamp = int(time.time() * 1000)
+            timestamp = datetime.now().isoformat() + 'Z'
         
         base_price = self.base_prices[symbol]
         
@@ -54,11 +54,15 @@ class SyntheticDataGenerator:
             conditions = random.choice([["I"], ["T"], ["I", "T"], []])
         
         return TradeData(
-            s=symbol,
+            T='t',
+            S=symbol,
+            i=random.randint(1, 999999),  # Trade ID
+            x=random.choice(['V', 'D', 'N', 'Q']),  # Exchange code
             p=round(price, 2),
+            s=volume,
+            c=conditions,
             t=timestamp,
-            v=volume,
-            c=conditions
+            z=random.choice(['A', 'B', 'C'])  # Tape
         )
 
     def generate_market_day_trades(self, date: datetime, 
@@ -80,15 +84,15 @@ class SyntheticDataGenerator:
             microsecond=0
         )
         
-        # Market duration in milliseconds
-        market_duration_ms = int((market_close - market_open).total_seconds() * 1000)
+        # Market duration in seconds
+        market_duration_sec = int((market_close - market_open).total_seconds())
         
         for symbol in self.symbols:
             for i in range(trades_per_symbol):
                 # Random time during market hours
-                random_offset = random.randint(0, market_duration_ms)
-                trade_time = market_open + timedelta(milliseconds=random_offset)
-                timestamp = int(trade_time.timestamp() * 1000)
+                random_offset = random.randint(0, market_duration_sec)
+                trade_time = market_open + timedelta(seconds=random_offset)
+                timestamp = trade_time.isoformat() + 'Z'
                 
                 trade = self.generate_single_trade(symbol, timestamp)
                 trades.append(trade)
@@ -101,7 +105,7 @@ class SyntheticDataGenerator:
                                trades_per_second: int = 10) -> List[TradeData]:
         """Generate a stream of trades for real-time simulation"""
         trades = []
-        start_time = int(time.time() * 1000)
+        start_time = datetime.now()
         
         for second in range(duration_seconds):
             for _ in range(trades_per_second):
@@ -109,7 +113,8 @@ class SyntheticDataGenerator:
                 symbol = random.choice(self.symbols)
                 
                 # Random time within the second
-                timestamp = start_time + (second * 1000) + random.randint(0, 999)
+                trade_time = start_time + timedelta(seconds=second, microseconds=random.randint(0, 999999))
+                timestamp = trade_time.isoformat() + 'Z'
                 
                 trade = self.generate_single_trade(symbol, timestamp)
                 trades.append(trade)
@@ -119,11 +124,12 @@ class SyntheticDataGenerator:
     def generate_burst_scenario(self, symbol: str, burst_count: int = 50) -> List[TradeData]:
         """Generate a burst of trades for stress testing"""
         trades = []
-        base_timestamp = int(time.time() * 1000)
+        base_time = datetime.now()
         
         for i in range(burst_count):
             # Trades within a 1-second window
-            timestamp = base_timestamp + random.randint(0, 1000)
+            trade_time = base_time + timedelta(microseconds=random.randint(0, 999999))
+            timestamp = trade_time.isoformat() + 'Z'
             trade = self.generate_single_trade(symbol, timestamp, price_volatility=0.05)
             trades.append(trade)
         
@@ -168,10 +174,11 @@ def generate_test_data(symbol: str = "AAPL", count: int = 100) -> List[TradeData
     """Generate simple test data for unit tests"""
     generator = SyntheticDataGenerator([symbol])
     trades = []
-    base_timestamp = int(time.time() * 1000)
+    base_time = datetime.now()
     
     for i in range(count):
-        timestamp = base_timestamp + (i * 1000)  # 1 trade per second
+        trade_time = base_time + timedelta(seconds=i)  # 1 trade per second
+        timestamp = trade_time.isoformat() + 'Z'
         trade = generator.generate_single_trade(symbol, timestamp)
         trades.append(trade)
     

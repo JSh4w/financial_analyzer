@@ -47,10 +47,10 @@ class TestDuckDBManager:
             base_timestamp: {
                 'open': 150.0, 'high': 155.0, 'low': 149.0, 'close': 154.0, 'volume': 1000000
             },
-            base_timestamp + 60000: {
+            "2022-01-01T00:01:00Z": {
                 'open': 154.0, 'high': 158.0, 'low': 153.0, 'close': 157.0, 'volume': 800000
             },
-            base_timestamp + 120000: {
+            "2022-01-01T00:02:00Z": {
                 'open': 157.0, 'high': 160.0, 'low': 156.0, 'close': 159.0, 'volume': 900000
             }
         }
@@ -281,7 +281,7 @@ class TestDuckDBManager:
         db_manager.bulk_upsert_candles("STAT1", bulk_candle_data)
 
         # Add different timestamp data for another symbol
-        other_data = {base_timestamp + 300000: bulk_candle_data[base_timestamp]}
+        other_data = {"2022-01-01T00:05:00Z": bulk_candle_data[base_timestamp]}
         db_manager.bulk_upsert_candles("STAT2", other_data)
 
         stats = db_manager.get_symbols_stats()
@@ -298,7 +298,7 @@ class TestDuckDBManager:
         assert stat1_result is not None
         assert stat1_result[1] == 3  # candle_count
         assert stat1_result[2] == base_timestamp  # first_candle (min timestamp)
-        assert stat1_result[3] == base_timestamp + 120000  # last_candle (max timestamp)
+        assert stat1_result[3] == "2022-01-01T00:02:00Z"  # last_candle (max timestamp)
 
     def test_get_symbols_stats_empty_database(self, db_manager):
         """Test getting stats from empty database"""
@@ -307,9 +307,9 @@ class TestDuckDBManager:
 
     def test_cleanup_old_data(self, db_manager, base_timestamp):
         """Test cleaning up old data"""
-        # Insert old and new data
-        old_timestamp = base_timestamp - (40 * 24 * 60 * 60 * 1000)  # 40 days ago
-        new_timestamp = base_timestamp - (10 * 24 * 60 * 60 * 1000)  # 10 days ago
+        # Insert old and new data using string timestamps
+        old_timestamp = "2021-11-22T00:00:00Z"  # 40 days ago from base
+        new_timestamp = "2021-12-22T00:00:00Z"  # 10 days ago from base
 
         old_data = {'open': 100.0, 'high': 105.0, 'low': 99.0, 'close': 104.0, 'volume': 500000}
         new_data = {'open': 200.0, 'high': 205.0, 'low': 199.0, 'close': 204.0, 'volume': 600000}
@@ -321,8 +321,8 @@ class TestDuckDBManager:
         count_before = db_manager.get_candle_count("CLEANUP")
         assert count_before == 2
 
-        # Cleanup data older than 30 days
-        db_manager.cleanup_old_data(days_to_keep=30, time_from = base_timestamp)
+        # Cleanup data older than 30 days (you'll implement timestamp conversion in duckdb_manager)
+        db_manager.cleanup_old_data(days_to_keep=30, time_from=base_timestamp)
 
         # Verify old data was removed
         count_after = db_manager.get_candle_count("CLEANUP")
@@ -406,7 +406,12 @@ class TestDuckDBManager:
             try:
                 symbol = f"CONCURRENT_{symbol_suffix}"
                 data = {'open': 100.0, 'high': 105.0, 'low': 99.0, 'close': 104.0, 'volume': 500000}
-                db_manager.upsert_candle(symbol, base_timestamp + symbol_suffix, data)
+                # Create unique timestamp for each thread
+                from datetime import datetime, timedelta
+                base_dt = datetime.fromisoformat(base_timestamp.replace('Z', '+00:00'))
+                timestamp_dt = base_dt + timedelta(seconds=symbol_suffix)
+                timestamp = timestamp_dt.isoformat().replace('+00:00', 'Z')
+                db_manager.upsert_candle(symbol, timestamp, data)
                 results.append(symbol)
             except Exception as e:
                 errors.append(e)
@@ -435,9 +440,13 @@ class TestDuckDBManager:
         symbol = "PERF_TEST"
         large_dataset = {}
 
-        # Generate 1000 candles
+        # Generate 1000 candles with RFC-3339 timestamps
+        from datetime import datetime, timedelta
+        base_dt = datetime.fromisoformat(base_timestamp.replace('Z', '+00:00'))
+        
         for i in range(1000):
-            timestamp = base_timestamp + (i * 60000)  # 1 minute intervals
+            timestamp_dt = base_dt + timedelta(minutes=i)  # 1 minute intervals
+            timestamp = timestamp_dt.isoformat().replace('+00:00', 'Z')
             large_dataset[timestamp] = {
                 'open': 100.0 + i * 0.1,
                 'high': 105.0 + i * 0.1,

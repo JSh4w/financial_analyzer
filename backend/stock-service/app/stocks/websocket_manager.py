@@ -33,11 +33,18 @@ class ConnectionState(Enum):
 class WebSocketManager:
     """ Manages Websocket connections with dynamic subscriptions
     allowing scope for multiple users"""
-    def __init__(self, output_queue = asyncio.Queue(maxsize = 500)):
-        self.finnhub_api_key = settings.FINNHUB_API_KEY
-        if not self.finnhub_api_key:
-            raise ValueError("FINNHUB_API_KEY variable is required")
-
+    def __init__(
+        self,
+        output_queue = asyncio.Queue(maxsize = 500),
+        uri: str = None,
+        headers: Dict[str, str] = None):
+        
+        #default to test environment
+        self.uri = uri or "wss://stream.data.alpaca.markets/v2/test"
+        self.headers = headers or {
+              "APCA-API-KEY-ID": settings.ALPACA_API_KEY,
+              "APCA-API-SECRET-KEY": settings.ALPACA_API_SECRET
+          }
         self.websocket: Optional[Any] = None
         self.upstream_task: Optional[asyncio.Task] = None
         self.state = ConnectionState.DISCONNECTED
@@ -58,7 +65,7 @@ class WebSocketManager:
 
 
     async def connect(self):
-        """Try connecting to Finnhub, return if connected"""
+        """Try connecting to Alpaca, return if connected"""
         logger.info("Attempting to connect to WebSocket")
         async with self._state_lock:
             if self.state == ConnectionState.CONNECTED:
@@ -72,16 +79,15 @@ class WebSocketManager:
             self.state = ConnectionState.CONNECTING
 
         try:
-            uri = f"wss://ws.finnhub.io?token={self.finnhub_api_key}"
             async with self._state_lock:
-                self.websocket = await websockets.connect(uri)
+                self.websocket = await websockets.connect(self.uri, additional_headers=self.headers)
                 self.state = ConnectionState.CONNECTED
-            logger.info("Connected to Finnhub WebSocket")
+            logger.info("Connected to Alpaca WebSocket")
 
             # Reconnect all symbols
             async with self._subscription_lock:
                 symbols_to_reconnect = list(self.active_subscriptions.keys())
-            
+
             failed_symbols=[]
             for symbol in symbols_to_reconnect:
                 success = await self._subscribe_symbol(symbol)
@@ -92,8 +98,6 @@ class WebSocketManager:
             return True
         except websockets.exceptions.InvalidStatus as e:
             logger.error("Connection failed, possible due to an invalid key: %s",e)
-            if self.finnhub_api_key == "demo_key":
-                logger.error("Using demo key, see config to update to valid key")
             async with self._state_lock:
                 self.state = ConnectionState.DISCONNECTED
                 self.websocket = None
@@ -155,7 +159,7 @@ class WebSocketManager:
             return False
 
         try:
-            message = json.dumps({"type": "subscribe", "symbol":symbol})
+            message = json.dumps({"action": "subscribe", "trades":[symbol]})
             await self.websocket.send(message)
             logger.info("Subscribed to %s",symbol)
             return True
@@ -170,7 +174,7 @@ class WebSocketManager:
         async with self._subscription_lock:
             if symbol not in self.active_subscriptions:
                 logger.info("Tried to remove user from non-existent symbol: %s", symbol)
-                return True 
+                return True
             elif user_id not in self.active_subscriptions[symbol]:
                 logger.info("Tried to remove non-existent user_id: %s from symbol: %s", user_id, symbol)
                 return True
@@ -203,7 +207,7 @@ class WebSocketManager:
             logger.warning("Cannot unsubscribe from %s - no Websocket connection", symbol)
             return False
         try:
-            message = json.dumps({"type": "unsubscribe", "symbol": symbol})
+            message = json.dumps({"action": "unsubscribe", "trades": [symbol]})
             await self.websocket.send(message)
             return True
         except Exception as e:
@@ -262,22 +266,29 @@ class WebSocketManager:
         return False
 
     async def _process_message(self, message: str):
-        """Process incoming WebSocket messages"""
+        """Process incoming Alpaca WebSocket messages"""
         try:
             data = json.loads(message)
-            # Handle different message types
-            if 'data' in data:
-                # Trade data
-                for trade in data['data']:
+            
+            # Handle array of messages (Alpaca format)
+            if isinstance(data, list):
+                for msg in data:
+                    if msg.get('T') == 't':  # Trade message
+                        if self.output_queue:
+                            await self.output_queue.put(msg)
+                    else:
+                        # Control/status messages
+                        logger.info("Control message: %s", msg)
+            else:
+                # Single message
+                if data.get('T') == 't':  # Trade message
                     if self.output_queue:
-                        await self.output_queue.put(trade)
-
-            elif 'type' in data:
-                # Control messages
-                logger.info("Control message: %s",data)
+                        await self.output_queue.put(data)
+                else:
+                    logger.info("Control message: %s", data)
 
         except json.JSONDecodeError as e:
-            logger.error("Failed to parse message: %s",e)
+            logger.error("Failed to parse message: %s", e)
         except Exception as e:
             logger.error("Error processing message: %s", e)
 
@@ -293,7 +304,7 @@ class WebSocketManager:
                         continue
                     if isinstance(message, bytes):
                         message = message.decode('utf-8')
-                    #logger.info("Processing messagge %s",message)
+                    logger.info("Processing messagge %s",message)
                     await self._process_message(message)
 
             except (websockets.exceptions.ConnectionClosed,
@@ -366,6 +377,7 @@ class WebSocketManager:
                 self.subscription_queue.task_done()
 
     async def _handle_queue_request(self, request: SubscriptionRequest ):
+        """Handles a single request"""
         success = False
         if request.action == "subscribe":
             success = await self.subscribe(request.symbol, request.user_id)

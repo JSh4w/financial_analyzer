@@ -23,3 +23,6 @@ class Settings(BaseSettings):
     POSTGRESQL_KEY : str = "TEMP VAL"
     SUPABASE_URL : str = "demo_url"
     SUPABASE_KEY : str = "demo_key"
+    ALPACA_TEST_URL: str = "wss://stream.data.alpaca.markets/v2/test"
+    ALPACA_API_KEY : str =  "demo_key"
+    ALPACA_API_SECRET : str = "demo_secret"

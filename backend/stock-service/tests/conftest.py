@@ -15,4 +15,4 @@ def sample_symbols():
 @pytest.fixture
 def base_timestamp():
     """Base timestamp for consistent testing (2022-01-01 00:00:00 UTC)"""
-    return 1640995200000
+    return "2022-01-01T00:00:00Z"

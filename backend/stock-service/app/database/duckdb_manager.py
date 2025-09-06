@@ -22,7 +22,7 @@ class DuckDBManager:
         self.conn.execute("""
             CREATE TABLE IF NOT EXISTS ohlcv_1m (
                 symbol VARCHAR NOT NULL,
-                minute_timestamp BIGINT NOT NULL,
+                minute_timestamp VARCHAR NOT NULL,
                 open DOUBLE NOT NULL,
                 high DOUBLE NOT NULL,
                 low DOUBLE NOT NULL,
@@ -45,7 +45,7 @@ class DuckDBManager:
                 symbol VARCHAR NOT NULL,
                 price DOUBLE NOT NULL,
                 volume BIGINT NOT NULL,
-                timestamp BIGINT NOT NULL,
+                timestamp VARCHAR NOT NULL,
                 trade_conditions VARCHAR[],
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
@@ -53,7 +53,7 @@ class DuckDBManager:
 
         logger.info("DuckDB tables created")
 
-    def upsert_candle(self, symbol: str, minute_timestamp: int, candle_data: Dict[str, Any]):
+    def upsert_candle(self, symbol: str, minute_timestamp: str, candle_data: Dict[str, Any]):
         """Insert or update a single minute candle"""
         try:
             self.conn.execute("""
@@ -72,7 +72,7 @@ class DuckDBManager:
         except Exception as e:
             logger.error(f"Failed to upsert candle for {symbol}: {e}")
 
-    def bulk_upsert_candles(self, symbol: str, candles_dict: Dict[int, Dict[str, Any]]):
+    def bulk_upsert_candles(self, symbol: str, candles_dict: Dict[str, Dict[str, Any]]):
         """Efficiently insert/update multiple candles for a symbol"""
         if not candles_dict:
             return
@@ -95,7 +95,7 @@ class DuckDBManager:
         except Exception as e:
             logger.error(f"Failed bulk upsert for {symbol}: {e}")
 
-    def get_recent_candles(self, symbol: str, limit: int = 1440) -> Dict[int, Dict[str, Any]]:
+    def get_recent_candles(self, symbol: str, limit: int = 1440) -> Dict[str, Dict[str, Any]]:
         """Get recent candles for a symbol, ordered by timestamp DESC"""
         try:
             result = self.conn.execute("""
@@ -118,7 +118,7 @@ class DuckDBManager:
             logger.error(f"Failed to get candles for {symbol}: {e}")
             return {}
 
-    def insert_trade(self, symbol: str, price: float, volume: int, timestamp: int, conditions: List[str] = None):
+    def insert_trade(self, symbol: str, price: float, volume: int, timestamp: str, conditions: List[str] = None):
         """Insert individual trade record"""
         try:
             self.conn.execute("""
@@ -180,19 +180,36 @@ class DuckDBManager:
             logger.error(f"Failed to get candle count: {e}")
             return 0
 
-    def cleanup_old_data(self, days_to_keep: int = 30, time_from: float = time.time()):
-        """Remove data older than specified days, with optional time_from"""
+    def cleanup_old_data(self, days_to_keep: int = 30, time_from: str = None):
+        """Remove data older than specified days
+        
+        Args:
+            days_to_keep: Number of days to keep
+            time_from: Reference time as RFC-3339 string (e.g., "2022-01-01T00:00:00Z")
+        """
         try:
-            cutoff_timestamp = time_from - (days_to_keep * 24 * 60 * 60* 1000)
+            from datetime import datetime, timedelta
+            
+            # Handle time_from parameter
+            if time_from is None:
+                cutoff_dt = datetime.now() - timedelta(days=days_to_keep)
+            else:
+                # Parse RFC-3339 format
+                reference_dt = datetime.fromisoformat(time_from.replace('Z', '+00:00'))
+                cutoff_dt = reference_dt - timedelta(days=days_to_keep)
+            
+            # Convert cutoff to RFC-3339 string
+            cutoff_timestamp = cutoff_dt.isoformat().replace('+00:00', 'Z')
 
             deleted = self.conn.execute("""
                 DELETE FROM ohlcv_1m WHERE minute_timestamp < ?
             """, [cutoff_timestamp]).fetchone()
 
-            logger.info(f"Cleaned up data older than {days_to_keep} days")
+            logger.info(f"Cleaned up data older than {days_to_keep} days from {cutoff_timestamp}")
             return deleted
         except Exception as e:
             logger.error(f"Failed to cleanup old data: {e}")
+            return None
 
     def close(self):
         """Close database connection"""
