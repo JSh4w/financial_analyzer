@@ -6,7 +6,7 @@
 		"docker-compose.yml"
 	],
 
-	"service": "python-service",
+	"service": "stock-service",
 
 	"workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
 
@@ -51,5 +51,5 @@
 	  }
 	},
 
-   "postStartCommand": "npm install -g @anthropic-ai/claude-code"	// Command to run after container creation
+   "postStartCommand": "npm install -g @anthropic-ai/claude-code"
 }

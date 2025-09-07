@@ -6,26 +6,33 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8001:8001"
+    env_file:
+      - ./backend/stock-service/.env
+    environment:
+      - FINNHUB_API_KEY=${FINNHUB_API_KEY}
+      - FINNHUB_BASE_URL=${FINNHUB_BASE_URL}
+      - ALPACA_TEST_URL=wss://stream.data.alpaca.markets/v2/test
+      - ALPACA_API_KEY=${ALPACA_API_KEY}
+      - ALPACA_API_SECRET=${ALPACA_API_SECRET}
+      - ALPHA_VANTAGE_API_KEY=${ALPHA_VANTAGE_API_KEY}
     volumes:
       - ./backend/stock-service:/app
       - pip_cache:/root/.cache/pip
-    environment:
-      - ENV=development
     command: uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
 
-  portfolio-service:
-    build:
-      context: ./backend/portfolio-service
-      dockerfile: Dockerfile
-    ports:
-      - "8002:8002"
-    volumes:
-      - ./backend/portfolio-service:/app
-      - pip_cache:/root/.cache/pip
-    environment:
-      - DATABASE_URL=${SUPABASE_DATABASE_URL}
-      - ENV=development
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8002 --reload
+  # portfolio-service:
+  #   build:
+  #     context: ./backend/portfolio-service
+  #     dockerfile: Dockerfile
+  #   ports:
+  #     - "8002:8002"
+  #   volumes:
+  #     - ./backend/portfolio-service:/app
+  #     - pip_cache:/root/.cache/pip
+  #   environment:
+  #     - DATABASE_URL=${SUPABASE_DATABASE_URL}
+  #     - ENV=development
+  #   command: uvicorn app.main:app --host 0.0.0.0 --port 8002 --reload
 
   frontend:
     build:
@@ -41,7 +48,6 @@ services:
       - VITE_API_URL=http://localhost:8001
     depends_on:
       - stock-service
-      - portfolio-service
 
 volumes:
   pip_cache:

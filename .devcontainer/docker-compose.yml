@@ -1,11 +1,7 @@
 services:
-  python-service:
-    # This is a workaround to allow the container to be used as a volume for the workspace
-    # This is needed because the workspace is mounted as a volume in the devcontainer.json file
-    # and the python-service container needs to be able to access the workspace
-    # This is a workaround to allow the container to be used as a volume for the workspace
-    # This is needed because the workspace is mounted as a volume in the devcontainer.json file
-    # and the python-service container needs to be able to access the workspace
+  stock-service:
+    image: python:3.11-slim
     volumes:
       - ..:/workspaces:cached
     command: sleep infinity
+    working_dir: /workspaces

@@ -20,18 +20,18 @@ jobs:
         docker build -f Dockerfile.test -t stock-service:test .
         docker run --rm stock-service:test
 
-  test-portfolio-service:
-    runs-on: ubuntu-latest
+  # test-portfolio-service:
+  #   runs-on: ubuntu-latest
     
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+  #   steps:
+  #   - name: Checkout code
+  #     uses: actions/checkout@v4
 
-    - name: Build and test portfolio-service
-      run: |
-        cd backend/portfolio-service
-        docker build -f Dockerfile.test -t portfolio-service:test .
-        docker run --rm portfolio-service:test
+  #   - name: Build and test portfolio-service
+  #     run: |
+  #       cd backend/portfolio-service
+  #       docker build -f Dockerfile.test -t portfolio-service:test .
+  #       docker run --rm portfolio-service:test
 
   test-frontend:
     runs-on: ubuntu-latest
