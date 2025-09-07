@@ -1,9 +1,11 @@
 """Processes trade data from websockets and routes to StockHandler instances"""
 from typing import Dict, Optional, Callable
+from collections import defaultdict
 import logging
 import asyncio
-import time
+from datetime import datetime, timezone
 
+from app.utils import time_function
 from app.stocks.stockHandler import StockHandler
 from models.websocket_models import TradeData
 
@@ -25,6 +27,7 @@ class TradeDataAggregator:
         self.db_manager = db_manager
         self.stock_handlers: Dict[str, StockHandler] = {}
         self.SHUTDOWN_SENTINAL = object()
+        self._handler_locks = defaultdict(asyncio.Lock)
 
     @staticmethod
     def create_trade_data(websocket_data) -> Optional[TradeData]:
@@ -62,36 +65,47 @@ class TradeDataAggregator:
         """Process queued trades - async for I/O, calls sync StockHandlers"""
         while True:
             input_data = await self.queue.get() #this releases control
+
             if input_data == self.SHUTDOWN_SENTINAL:
                 break
-            #convert data
-            trade_data = self.create_trade_data(input_data)
-            if trade_data is None:
-                continue
-            symbol = trade_data.S
 
-            # Create StockHandler if needed (sync operation)
-            handler_callback = self._create_update_callback() if self.broadcast_callback else None
-            self.stock_handlers.setdefault(symbol, StockHandler(
-                symbol,
-                db_manager=self.db_manager,
-                on_update_callback=handler_callback
-            ))
+            await self._process_single_trade(input_data)
 
-            # Process trade (sync OHLCV computation)
-            self.stock_handlers[symbol].process_trade(
-                price=trade_data.p,
-                volume=trade_data.s,
-                timestamp=trade_data.t,
-                conditions=trade_data.c
-            )
+    @time_function(f"_process_single_trade")
+    async def _process_single_trade(self, input_data):
+        """Process a single trade with timing"""
 
-            # Optional callback for processed trades
-            if self.callback:
-                try:
-                    self.callback(trade_data)
-                except Exception as e:
-                    logger.error("Error in trade callback: %s", e)
+        #convert data
+        trade_data = self.create_trade_data(input_data)
+        if trade_data is None:
+            return
+        symbol = trade_data.S
+
+        # Create StockHandler if needed (sync operation)
+        async with self._handler_locks[symbol]:
+            if symbol not in self.stock_handlers:
+                handler_callback = self._create_update_callback() if self.broadcast_callback else None
+                self.stock_handlers[symbol] = StockHandler(
+                    symbol,
+                    db_manager=self.db_manager,
+                    on_update_callback=handler_callback
+                )
+
+        # Process trade (sync OHLCV computation)
+        self.stock_handlers[symbol].process_trade(
+            price=trade_data.p,
+            volume=trade_data.s,
+            timestamp=trade_data.t,
+            conditions=trade_data.c
+        )
+
+        # Optional callback for processed trades
+        if self.callback:
+            try:
+                self.callback(trade_data)
+            except Exception as e:
+                logger.error("Error in trade callback: %s", e)
+
 
     def get_stock_handler(self, symbol: str) -> Optional[StockHandler]:
         """Get StockHandler instance for a symbol"""
@@ -109,7 +123,7 @@ class TradeDataAggregator:
                 update_data = {
                     "symbol": symbol,
                     "candles": candle_data,
-                    "update_timestamp": time.time()
+                    "update_timestamp": datetime.now(timezone.utc).isoformat()
                 }
                 try:
                     # Call the broadcast callback (this will be async in main.py)

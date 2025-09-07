@@ -7,6 +7,7 @@ import asyncio
 import logging
 from enum import Enum
 import websockets
+import time
 
 #from app.stocks.market_data_handler import TradeDataHandler
 from app.stocks.data_aggregator import TradeDataAggregator
@@ -267,26 +268,39 @@ class WebSocketManager:
 
     async def _process_message(self, message: str):
         """Process incoming Alpaca WebSocket messages"""
-        try:
+        # Import here to avoid circular import
+        from app.main import time_function
+        
+        @time_function("websocket_process_message")
+        async def process_message_data():
             data = json.loads(message)
             
             # Handle array of messages (Alpaca format)
             if isinstance(data, list):
+                trade_count = 0
                 for msg in data:
                     if msg.get('T') == 't':  # Trade message
                         if self.output_queue:
                             await self.output_queue.put(msg)
+                            trade_count += 1
                     else:
                         # Control/status messages
                         logger.info("Control message: %s", msg)
+                
+                if trade_count > 0:
+                    logger.debug(f"Queued {trade_count} trades")
+                    
             else:
                 # Single message
                 if data.get('T') == 't':  # Trade message
                     if self.output_queue:
                         await self.output_queue.put(data)
+                        logger.debug("Queued single trade")
                 else:
                     logger.info("Control message: %s", data)
-
+        
+        try:
+            await process_message_data()
         except json.JSONDecodeError as e:
             logger.error("Failed to parse message: %s", e)
         except Exception as e:
@@ -304,7 +318,7 @@ class WebSocketManager:
                         continue
                     if isinstance(message, bytes):
                         message = message.decode('utf-8')
-                    logger.info("Processing messagge %s",message)
+                    logger.info("Processing message %s",message)
                     await self._process_message(message)
 
             except (websockets.exceptions.ConnectionClosed,

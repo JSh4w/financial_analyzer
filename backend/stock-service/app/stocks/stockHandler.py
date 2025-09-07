@@ -15,6 +15,7 @@ class StockHandler():
         self.on_update_callback = on_update_callback
         
         # Load recent data from database on initialization
+        logger.info("INIT AGAIN")
         if self.db_manager:
             self._load_recent_data()
 
@@ -48,6 +49,9 @@ class StockHandler():
             logger.error("Invalid timestamp format: %s, error: %s", timestamp, e)
             return
 
+        # Check if this is a new candle (new minute)
+        is_new_candle = minute_timestamp not in self._ohlcv
+        
         # Update existing candle
         candle = self._ohlcv.setdefault(minute_timestamp, {
             'high': price, 'low': price, 'open': price,
@@ -59,12 +63,20 @@ class StockHandler():
         candle['volume'] += volume
         candle['close'] = price
         
-        # Persist to DuckDB immediately
-        if self.db_manager:
-            # Insert individual trade record
-            self.db_manager.insert_trade(self._symbol, price, volume, timestamp, conditions or [])
-            # Update OHLCV candle
-            self.db_manager.upsert_candle(self._symbol, minute_timestamp, candle)
+        # Only write to database when a new candle starts (previous candle is complete)
+        if is_new_candle and self.db_manager and len(self._ohlcv) > 1:
+            # Get the previous candle (the one that just completed)
+            sorted_timestamps = sorted(self._ohlcv.keys())
+            prev_timestamp = sorted_timestamps[-2]  # Second to last (just completed)
+            prev_candle = self._ohlcv[prev_timestamp]
+            
+            # Save the completed candle
+            self.db_manager.upsert_candle(self._symbol, prev_timestamp, prev_candle)
+            logger.debug(f"Saved completed candle for {self._symbol} at {prev_timestamp}")
+            
+        # Optional: Still save individual trades if needed for audit trail
+        # if self.db_manager:
+        #     self.db_manager.insert_trade(self._symbol, price, volume, timestamp, conditions or [])
         
         # Trigger update callback if set
         if self.on_update_callback:
