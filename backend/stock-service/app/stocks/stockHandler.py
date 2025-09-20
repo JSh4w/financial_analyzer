@@ -62,22 +62,56 @@ class StockHandler():
         candle['low'] = min(candle['low'], price)
         candle['volume'] += volume
         candle['close'] = price
-        
-        # Only write to database when a new candle starts (previous candle is complete)
-        if is_new_candle and self.db_manager and len(self._ohlcv) > 1:
-            # Get the previous candle (the one that just completed)
-            sorted_timestamps = sorted(self._ohlcv.keys())
-            prev_timestamp = sorted_timestamps[-2]  # Second to last (just completed)
-            prev_candle = self._ohlcv[prev_timestamp]
-            
-            # Save the completed candle
-            self.db_manager.upsert_candle(self._symbol, prev_timestamp, prev_candle)
-            logger.debug(f"Saved completed candle for {self._symbol} at {prev_timestamp}")
-            
-        # Optional: Still save individual trades if needed for audit trail
-        # if self.db_manager:
-        #     self.db_manager.insert_trade(self._symbol, price, volume, timestamp, conditions or [])
-        
+
+        # Use shared helper for final processing
+        self._update_candle_data(minute_timestamp, is_new_candle)
+
+    def process_candle(self, candle_data: Dict[str, Any]):
+        """Process complete candle data directly (for minute bar subscriptions)
+
+        Args:
+            candle_data: Dict containing 'open', 'high', 'low', 'close', 'volume', 'timestamp'
+        """
+        try:
+            timestamp = candle_data['timestamp']
+
+            # Convert RFC-3339 timestamp to minute-aligned timestamp string
+            dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+            minute_aligned_dt = dt.replace(second=0, microsecond=0)
+            minute_timestamp = minute_aligned_dt.isoformat().replace('+00:00', 'Z')
+
+            # Store the complete candle directly
+            self._ohlcv[minute_timestamp] = {
+                'open': candle_data['open'],
+                'high': candle_data['high'],
+                'low': candle_data['low'],
+                'close': candle_data['close'],
+                'volume': candle_data['volume']
+            }
+
+            # Use shared helper for final processing (always save complete candles immediately)
+            self._update_candle_data(minute_timestamp, save_immediately=True)
+
+        except (ValueError, KeyError, AttributeError) as e:
+            logger.error("Failed to process candle data for %s: %s", self._symbol, e)
+
+    def _update_candle_data(self, minute_timestamp: str, is_new_candle: bool = False, save_immediately: bool = False):
+        """Shared helper for database operations and callbacks"""
+
+        # Save to database logic
+        if self.db_manager:
+            if save_immediately:
+                # Save current candle immediately (for complete candle data)
+                self.db_manager.upsert_candle(self._symbol, minute_timestamp, self._ohlcv[minute_timestamp])
+                logger.debug(f"Saved candle for {self._symbol} at {minute_timestamp}")
+            elif is_new_candle and len(self._ohlcv) > 1:
+                # Save previous completed candle (for incremental trade data)
+                sorted_timestamps = sorted(self._ohlcv.keys())
+                prev_timestamp = sorted_timestamps[-2]  # Second to last (just completed)
+                prev_candle = self._ohlcv[prev_timestamp]
+                self.db_manager.upsert_candle(self._symbol, prev_timestamp, prev_candle)
+                logger.debug(f"Saved completed candle for {self._symbol} at {prev_timestamp}")
+
         # Trigger update callback if set
         if self.on_update_callback:
             self.on_update_callback(self._symbol, self._ohlcv)
