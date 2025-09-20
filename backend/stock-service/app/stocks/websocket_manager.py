@@ -1,6 +1,6 @@
 # backend/python-service/app/main_test.py
 import os
-from typing import Optional, Any, Set, Dict, List, Callable
+from typing import Optional, Any, Set, Dict, Callable
 from dataclasses import dataclass
 import json
 import asyncio
@@ -55,7 +55,7 @@ class WebSocketManager:
         self.subscription_queue = asyncio.Queue(maxsize = 20)
         self.output_queue = output_queue
 
-        self.active_subscriptions :  Dict[str , List[int]] = {}
+        self.active_subscriptions :  Dict[str , Set[int]] = {}
         self.subscription_task : Optional[asyncio.Task] = None
 
         self.max_reconnect_attempts = 3
@@ -130,13 +130,17 @@ class WebSocketManager:
         symbol = symbol.upper()
 
         subscribe_symbol = False
+        # subscription lock required incase a user unsuscribes
+        # while another subscribes at the same time
+        # it's less important for concurrent susbcriptions
+        # its for both subscription and unsubscription at once
         async with self._subscription_lock:
-            if symbol in self.active_subscriptions:
+            if symbol in self.active_subscriptions: #O(1) dict lookup 
                 logger.info("Subscriptions to %s already present",symbol)
-                if user_id in self.active_subscriptions[symbol]:
+                if user_id in self.active_subscriptions[symbol]: # O(1) set lookup 
                     logger.warning("User already subscribed")
                 else:
-                    self.active_subscriptions[symbol].append(user_id)  # Add user directly
+                    self.active_subscriptions[symbol].add(user_id)  # Add user directly
                 return True
             else:
                 subscribe_symbol = True
@@ -145,7 +149,7 @@ class WebSocketManager:
             subscribed = await self._subscribe_symbol(symbol)
             if subscribed:
                 async with self._subscription_lock:
-                    self.active_subscriptions.setdefault(symbol, []).append(user_id)
+                    self.active_subscriptions.setdefault(symbol, set()).add(user_id)
             return subscribed
 
         logger.info("subscription to %s queued - not connected to websocket", symbol)
@@ -190,7 +194,7 @@ class WebSocketManager:
 
         async with self._subscription_lock:
             try:
-                self.active_subscriptions[symbol].remove(user_id)
+                self.active_subscriptions[symbol].discard(user_id)
             except KeyError:
                 logger.info("Tried to remove user from non-existent symbol: %s", symbol)
                 return True
