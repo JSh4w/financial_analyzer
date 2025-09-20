@@ -49,3 +49,47 @@ class TradeData():
             t=data_dict['t'],
             z=data_dict['z']
         )
+
+@dataclass
+class QuoteData:
+    """Quote data from websocket"""
+    __slots__ = ['T', 'S', 'bx', 'bp', 'bs', 'ax', 'ap', 'as', 'c', 't', 'z']
+    T: str       # message type, always "q"
+    S: str       # symbol
+    bx: str      # bid exchange
+    bp: float    # bid price
+    bs: int      # bid size
+    ax: str      # ask exchange
+    ap: float    # ask price
+    as_: int     # ask size (renamed to avoid keyword conflict)
+    c: List[str] # quote conditions
+    t: str       # RFC-3339 timestamp
+    z: str       # tape
+
+@dataclass
+class BarData:
+    """Bar/candle data from websocket"""
+    __slots__ = ['T', 'S', 'o', 'h', 'l', 'c', 'v', 't', 'n', 'vw']
+    T: str      # message type, always "b"
+    S: str      # symbol
+    o: float    # open price
+    h: float    # high price
+    l: float    # low price
+    c: float    # close price
+    v: int      # volume
+    t: str      # RFC-3339 timestamp (start of bar)
+    n: int      # number of trades during the bar
+    vw: float   # volume weighted average price
+
+    def to_candle_dict(self) -> Dict[str, any]:
+        """Convert to candle format for StockHandler"""
+        return {
+            'open': self.o,
+            'high': self.h,
+            'low': self.l,
+            'close': self.c,
+            'volume': self.v,
+            'timestamp': self.t,
+            'trade_count': self.n,
+            'vwap': self.vw
+        }

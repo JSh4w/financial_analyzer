@@ -1,12 +1,13 @@
 # backend/python-service/app/main_test.py
 import os
-from typing import Optional, Any, Set, Dict, List, Callable
-from dataclasses import dataclass
+from typing import Optional, Any, Set, Dict, Callable, List
+from dataclasses import dataclass, field
 import json
 import asyncio
 import logging
 from enum import Enum
 import websockets
+import time
 
 #from app.stocks.market_data_handler import TradeDataHandler
 from app.stocks.data_aggregator import TradeDataAggregator
@@ -16,10 +17,52 @@ settings = Settings()
 logger = logging.getLogger(__name__)
 
 @dataclass
+class SubscriptionConfig:
+    """Configuration for different subscription types"""
+    subscription_type: str  # 'trades', 'quotes', 'bars'
+    max_symbols: Optional[int] = None  # None means unlimited
+    message_type_identifier: str = None  # 't' for trades, 'q' for quotes, 'b' for bars
+
+    def __post_init__(self):
+        if self.message_type_identifier is None:
+            type_map = {
+                'trades': 't',
+                'quotes': 'q',
+                'bars': 'b'
+            }
+            self.message_type_identifier = type_map.get(self.subscription_type, 't')
+
+    def create_subscribe_message(self, symbols: List[str]) -> str:
+        """Create subscription message for Alpaca API"""
+        return json.dumps({"action": "subscribe", self.subscription_type: symbols})
+
+    def create_unsubscribe_message(self, symbols: List[str]) -> str:
+        """Create unsubscription message for Alpaca API"""
+        return json.dumps({"action": "unsubscribe", self.subscription_type: symbols})
+
+@dataclass
+class AlpacaSubscriptionSettings:
+    """Alpaca API subscription settings and limits"""
+    trades: SubscriptionConfig = field(default_factory=lambda: SubscriptionConfig('trades', 30, 't'))
+    quotes: SubscriptionConfig = field(default_factory=lambda: SubscriptionConfig('quotes', 30, 'q'))
+    bars: SubscriptionConfig = field(default_factory=lambda: SubscriptionConfig('bars', None, 'b'))
+
+    def get_config(self, subscription_type: str) -> SubscriptionConfig:
+        return getattr(self, subscription_type, self.trades)
+
+    def get_all_configs(self) -> Dict[str, SubscriptionConfig]:
+        return {
+            'trades': self.trades,
+            'quotes': self.quotes,
+            'bars': self.bars
+        }
+
+@dataclass
 class SubscriptionRequest:
     """Message for subscription management"""
     action: str  # 'subscribe' or 'unsubscribe'
     symbol: str
+    subscription_type: str = 'trades'  # Default to trades for backward compatibility
     user_id: Optional[int] = None  # For tracking/logging
 
 class ConnectionState(Enum):
@@ -37,14 +80,17 @@ class WebSocketManager:
         self,
         output_queue = asyncio.Queue(maxsize = 500),
         uri: str = None,
-        headers: Dict[str, str] = None):
-        
+        headers: Dict[str, str] = None,
+        subscription_settings: AlpacaSubscriptionSettings = None):
+
         #default to test environment
         self.uri = uri or "wss://stream.data.alpaca.markets/v2/test"
         self.headers = headers or {
               "APCA-API-KEY-ID": settings.ALPACA_API_KEY,
               "APCA-API-SECRET-KEY": settings.ALPACA_API_SECRET
           }
+        self.subscription_settings = subscription_settings or AlpacaSubscriptionSettings()
+
         self.websocket: Optional[Any] = None
         self.upstream_task: Optional[asyncio.Task] = None
         self.state = ConnectionState.DISCONNECTED
@@ -54,7 +100,8 @@ class WebSocketManager:
         self.subscription_queue = asyncio.Queue(maxsize = 20)
         self.output_queue = output_queue
 
-        self.active_subscriptions :  Dict[str , List[int]] = {}
+        # symbol -> subscription_type -> users
+        self.active_subscriptions: Dict[str, Dict[str, Set[int]]] = {}
         self.subscription_task : Optional[asyncio.Task] = None
 
         self.max_reconnect_attempts = 3
@@ -123,95 +170,113 @@ class WebSocketManager:
             logger.info("Not connected")
         logger.info("Disconnected from WebSocket")
 
-    async def subscribe(self, symbol: str, user_id : int)-> bool:
+    async def subscribe(self, symbol: str, user_id: int, subscription_type: str = 'trades') -> bool:
         """Subscribe to a symbol and optionally register a data handler
         to update database, notify frontend or process data"""
         symbol = symbol.upper()
 
-        subscribe_symbol = False
-        async with self._subscription_lock:
-            if symbol in self.active_subscriptions:
-                logger.info("Subscriptions to %s already present",symbol)
-                if user_id in self.active_subscriptions[symbol]:
-                    logger.warning("User already subscribed")
-                else:
-                    self.active_subscriptions[symbol].append(user_id)  # Add user directly
-                return True
-            else:
-                subscribe_symbol = True
-
-        if subscribe_symbol:
-            subscribed = await self._subscribe_symbol(symbol)
-            if subscribed:
-                async with self._subscription_lock:
-                    self.active_subscriptions.setdefault(symbol, []).append(user_id)
-            return subscribed
-
-        logger.info("subscription to %s queued - not connected to websocket", symbol)
-        ##implement queue logic
-        return False
-
-    async def _subscribe_symbol(self, symbol : str):
-        """Send subscription message for a symbol"""
-        symbol = symbol.upper()
-        if self.state != ConnectionState.CONNECTED:
-            logger.warning("Can not subscribe to %s stock, no websocket connection", symbol)
-            return False
-
-        try:
-            message = json.dumps({"action": "subscribe", "trades":[symbol]})
-            await self.websocket.send(message)
-            logger.info("Subscribed to %s",symbol)
-            return True
-        except Exception as e:
-            logger.error("Failed to subscribe to %s, error %s", symbol, e)
-            return False
-
-    async def unsubscribe(self, symbol: str, user_id : int)-> bool:
-        """Unscribe a symbol from websocket and data handler"""
-        symbol = symbol.upper()
-        unsubscribed_symbol = False
-        async with self._subscription_lock:
-            if symbol not in self.active_subscriptions:
-                logger.info("Tried to remove user from non-existent symbol: %s", symbol)
-                return True
-            elif user_id not in self.active_subscriptions[symbol]:
-                logger.info("Tried to remove non-existent user_id: %s from symbol: %s", user_id, symbol)
-                return True
-            if len(self.active_subscriptions[symbol])==1:
-                unsubscribed_symbol = True
-
-        if unsubscribed_symbol:
-            unsubscribed = await self._unsubscribe_symbol(symbol)
-            if not unsubscribed:
-                logger.info("unsubscribe unsuccessful")
+        # Check subscription limits
+        config = self.subscription_settings.get_config(subscription_type)
+        if config.max_symbols is not None:
+            current_count = len([s for s in self.active_subscriptions.keys()
+                               if subscription_type in self.active_subscriptions[s]])
+            if current_count >= config.max_symbols:
+                logger.warning("Subscription limit reached for %s (max: %d)",
+                             subscription_type, config.max_symbols)
                 return False
 
         async with self._subscription_lock:
-            try:
-                self.active_subscriptions[symbol].remove(user_id)
-            except KeyError:
-                logger.info("Tried to remove user from non-existent symbol: %s", symbol)
+            if (symbol in self.active_subscriptions and
+                subscription_type in self.active_subscriptions[symbol]):
+                # Already subscribed to this symbol+type combo
+                if user_id in self.active_subscriptions[symbol][subscription_type]:
+                    logger.warning("User %d already subscribed to %s %s", user_id, symbol, subscription_type)
+                    return True
+                else:
+                    self.active_subscriptions[symbol][subscription_type].add(user_id)
+                    return True
+
+        # Need to subscribe to this symbol+type combo via API
+        subscribed = await self._subscribe_symbol(symbol, subscription_type)
+        if subscribed:
+            async with self._subscription_lock:
+                if symbol not in self.active_subscriptions:
+                    self.active_subscriptions[symbol] = {}
+                if subscription_type not in self.active_subscriptions[symbol]:
+                    self.active_subscriptions[symbol][subscription_type] = set()
+                self.active_subscriptions[symbol][subscription_type].add(user_id)
+            return True
+
+        logger.info("subscription to %s %s queued - not connected to websocket", symbol, subscription_type)
+        return False
+
+    async def _subscribe_symbol(self, symbol: str, subscription_type: str = 'trades'):
+        """Send subscription message for a symbol"""
+        symbol = symbol.upper()
+        if self.state != ConnectionState.CONNECTED:
+            logger.warning("Can not subscribe to %s %s, no websocket connection", symbol, subscription_type)
+            return False
+
+        try:
+            config = self.subscription_settings.get_config(subscription_type)
+            message = config.create_subscribe_message([symbol])
+            await self.websocket.send(message)
+            logger.info("Subscribed to %s %s", symbol, subscription_type)
+            return True
+        except Exception as e:
+            logger.error("Failed to subscribe to %s %s, error %s", symbol, subscription_type, e)
+            return False
+
+    async def unsubscribe(self, symbol: str, user_id: int, subscription_type: str = 'trades') -> bool:
+        """Unsubscribe a symbol from websocket and data handler"""
+        symbol = symbol.upper()
+        unsubscribe_symbol_type = False
+
+        async with self._subscription_lock:
+            if (symbol not in self.active_subscriptions or
+                subscription_type not in self.active_subscriptions[symbol]):
+                logger.info("Tried to remove user from non-existent symbol+type: %s %s", symbol, subscription_type)
                 return True
-            except ValueError:
-                logger.info("Tried to remove non-existent user_id: %s from symbol: %s", user_id, symbol)
+
+            if user_id not in self.active_subscriptions[symbol][subscription_type]:
+                logger.info("Tried to remove non-existent user_id: %s from symbol: %s %s", user_id, symbol, subscription_type)
                 return True
-            if len(self.active_subscriptions[symbol])==0:
-                del self.active_subscriptions[symbol]
+
+            # Check if this is the last user for this symbol+type combo
+            if len(self.active_subscriptions[symbol][subscription_type]) == 1:
+                unsubscribe_symbol_type = True
+
+        if unsubscribe_symbol_type:
+            unsubscribed = await self._unsubscribe_symbol(symbol, subscription_type)
+            if not unsubscribed:
+                logger.info("unsubscribe unsuccessful for %s %s", symbol, subscription_type)
+                return False
+
+        async with self._subscription_lock:
+            self.active_subscriptions[symbol][subscription_type].discard(user_id)
+
+            # Clean up empty structures
+            if len(self.active_subscriptions[symbol][subscription_type]) == 0:
+                del self.active_subscriptions[symbol][subscription_type]
+                if len(self.active_subscriptions[symbol]) == 0:
+                    del self.active_subscriptions[symbol]
+
         return True
 
 
-    async def _unsubscribe_symbol(self, symbol: str) -> bool:
+    async def _unsubscribe_symbol(self, symbol: str, subscription_type: str = 'trades') -> bool:
         """Send unsubscription message for a symbol"""
         if self.state != ConnectionState.CONNECTED:
-            logger.warning("Cannot unsubscribe from %s - no Websocket connection", symbol)
+            logger.warning("Cannot unsubscribe from %s %s - no Websocket connection", symbol, subscription_type)
             return False
         try:
-            message = json.dumps({"action": "unsubscribe", "trades": [symbol]})
+            config = self.subscription_settings.get_config(subscription_type)
+            message = config.create_unsubscribe_message([symbol])
             await self.websocket.send(message)
+            logger.info("Unsubscribed from %s %s", symbol, subscription_type)
             return True
         except Exception as e:
-            logger.error("Failed to unsubscribe from %s : %s", symbol, e)
+            logger.error("Failed to unsubscribe from %s %s: %s", symbol, subscription_type, e)
             return False
 
 
@@ -267,26 +332,47 @@ class WebSocketManager:
 
     async def _process_message(self, message: str):
         """Process incoming Alpaca WebSocket messages"""
-        try:
+        # Import here to avoid circular import
+        from app.main import time_function
+
+        @time_function("websocket_process_message")
+        async def process_message_data():
             data = json.loads(message)
-            
+
             # Handle array of messages (Alpaca format)
             if isinstance(data, list):
+                message_count = 0
                 for msg in data:
-                    if msg.get('T') == 't':  # Trade message
-                        if self.output_queue:
-                            await self.output_queue.put(msg)
+                    msg_type = msg.get('T')
+                    # Check if this message type is configured
+                    for config in self.subscription_settings.get_all_configs().values():
+                        if msg_type == config.message_type_identifier:
+                            if self.output_queue:
+                                await self.output_queue.put(msg)
+                                message_count += 1
+                            break
                     else:
-                        # Control/status messages
-                        logger.info("Control message: %s", msg)
+                        # Control/status messages or unknown types
+                        logger.info("Control/unknown message: %s", msg)
+
+                if message_count > 0:
+                    logger.debug(f"Queued {message_count} market data messages")
+
             else:
                 # Single message
-                if data.get('T') == 't':  # Trade message
-                    if self.output_queue:
-                        await self.output_queue.put(data)
+                msg_type = data.get('T')
+                # Check if this message type is configured
+                for config in self.subscription_settings.get_all_configs().values():
+                    if msg_type == config.message_type_identifier:
+                        if self.output_queue:
+                            await self.output_queue.put(data)
+                            logger.debug("Queued single market data message")
+                        break
                 else:
-                    logger.info("Control message: %s", data)
+                    logger.info("Control/unknown message: %s", data)
 
+        try:
+            await process_message_data()
         except json.JSONDecodeError as e:
             logger.error("Failed to parse message: %s", e)
         except Exception as e:
@@ -304,7 +390,7 @@ class WebSocketManager:
                         continue
                     if isinstance(message, bytes):
                         message = message.decode('utf-8')
-                    logger.info("Processing messagge %s",message)
+                    logger.info("Processing message %s",message)
                     await self._process_message(message)
 
             except (websockets.exceptions.ConnectionClosed,

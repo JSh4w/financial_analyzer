@@ -2,7 +2,7 @@
 import pytest
 import asyncio
 from unittest.mock import Mock, AsyncMock
-from models.websocket_models import TradeData
+from models.websocket_models import TradeData, QuoteData, BarData
 from app.stocks.data_aggregator import TradeDataAggregator
 from tests.synthetic_data_generator import SyntheticDataGenerator, generate_test_data
 
@@ -62,10 +62,10 @@ class TestTradeDataAggregator:
         aggregator = TradeDataAggregator(callback=mock_callback, input_queue=test_queue)
         assert aggregator.callback == mock_callback
 
-    def test_create_trade_data_factory_dict(self, aggregator, sample_trade_data):
+    def test_create_market_data_factory_dict(self, aggregator, sample_trade_data):
         """Test factory method with dict input"""
         dict_data = sample_trade_data['dict_format']
-        trade_data = aggregator.create_trade_data(dict_data)
+        trade_data = aggregator.create_market_data(dict_data)
 
         assert isinstance(trade_data, TradeData)
         assert trade_data.S == 'AAPL'
@@ -74,14 +74,44 @@ class TestTradeDataAggregator:
         assert trade_data.s == 100
         assert trade_data.c == []
 
-    def test_create_trade_data_factory_tradedata(self, aggregator, sample_trade_data):
+    def test_create_market_data_factory_tradedata(self, aggregator, sample_trade_data):
         """Test factory method with TradeData input"""
         trade_data_input = sample_trade_data['tradedata_format']
-        trade_data = aggregator.create_trade_data(trade_data_input)
+        trade_data = aggregator.create_market_data(trade_data_input)
 
         assert isinstance(trade_data, TradeData)
         assert trade_data is trade_data_input  # Should return same instance
         assert trade_data.S == 'GOOGL'
+
+    def test_create_market_data_factory_bar_data(self, aggregator):
+        """Test factory method with bar/candle data"""
+        bar_dict = {
+            'T': 'b',
+            'S': 'AAPL',
+            'o': 150.0,
+            'h': 151.5,
+            'l': 149.0,
+            'c': 150.75,
+            'v': 10000,
+            't': '2022-01-01T10:30:00Z',
+            'n': 50,
+            'vw': 150.5
+        }
+
+        bar_data = aggregator.create_market_data(bar_dict)
+
+        assert isinstance(bar_data, BarData)
+        assert bar_data.S == 'AAPL'
+        assert bar_data.o == 150.0
+        assert bar_data.c == 150.75
+        assert bar_data.v == 10000
+
+        # Test conversion to candle dict
+        candle_dict = bar_data.to_candle_dict()
+        assert candle_dict['open'] == 150.0
+        assert candle_dict['close'] == 150.75
+        assert candle_dict['volume'] == 10000
+        assert candle_dict['timestamp'] == '2022-01-01T10:30:00Z'
 
     @pytest.mark.asyncio
     async def test_queue_data_directly(self, aggregator, sample_trade_data):
@@ -97,9 +127,9 @@ class TestTradeDataAggregator:
         # Queue should have one item
         assert aggregator.queue.qsize() == 1
 
-        # Get the queued item - it will be processed by create_trade_data
+        # Get the queued item - it will be processed by create_market_data
         queued_data = await aggregator.queue.get()
-        trade_data = aggregator.create_trade_data(queued_data)
+        trade_data = aggregator.create_market_data(queued_data)
         assert isinstance(trade_data, TradeData)
         assert trade_data.S == 'AAPL'
 
@@ -121,7 +151,7 @@ class TestTradeDataAggregator:
         for _ in range(3):
             if aggregator.queue.qsize() > 0:
                 input_data = await aggregator.queue.get()
-                trade_data = aggregator.create_trade_data(input_data)
+                trade_data = aggregator.create_market_data(input_data)
                 symbol = trade_data.S
 
                 if symbol not in aggregator.stock_handlers:
@@ -155,7 +185,7 @@ class TestTradeDataAggregator:
 
         # Manually process one trade
         queued_data = await aggregator.queue.get()
-        queued_trade = aggregator.create_trade_data(queued_data)
+        queued_trade = aggregator.create_market_data(queued_data)
 
         # Simulate what process_tick_queue does
         symbol = queued_trade.S
@@ -198,7 +228,7 @@ class TestTradeDataAggregator:
         for _ in range(max_process):
             if aggregator.queue.qsize() > 0:
                 input_data = await aggregator.queue.get()
-                trade_data = aggregator.create_trade_data(input_data)
+                trade_data = aggregator.create_market_data(input_data)
                 symbol = trade_data.S
 
                 if symbol not in aggregator.stock_handlers:
@@ -295,7 +325,7 @@ class TestTradeDataAggregator:
         
         while aggregator.queue.qsize() > 0 and processed_count < max_iterations:
             input_data = await aggregator.queue.get()
-            trade_data = aggregator.create_trade_data(input_data)
+            trade_data = aggregator.create_market_data(input_data)
             if trade_data is None:
                 continue
             symbol = trade_data.S
@@ -346,7 +376,7 @@ async def test_realistic_market_simulation():
 
     while aggregator.queue.qsize() > 0 and processed_count < 200:  # Limit for test
         input_data = await aggregator.queue.get()
-        trade_data = aggregator.create_trade_data(input_data)
+        trade_data = aggregator.create_market_data(input_data)
         if trade_data is None:
             continue
         symbol = trade_data.S

@@ -12,13 +12,13 @@ interface StockData {
       volume: number
     }
   }
-  update_timestamp?: number
+  update_timestamp?: string
 }
 
 function App() {
   const [isSubscribed, setIsSubscribed] = useState(false)
   const [isStreaming, setIsStreaming] = useState(false)
-  const [stockData, setStockData] = useState<StockData[]>([])
+  const [stockData, setStockData] = useState<StockData | null>(null)
   const [status, setStatus] = useState('')
   const eventSourceRef = useRef<EventSource | null>(null)
 
@@ -26,8 +26,8 @@ function App() {
 
   const subscribeToApple = async () => {
     try {
-      setStatus('Subscribing to AAPL...')
-      const response = await fetch(`${BACKEND_URL}/ws_manager/AAPL`)
+      setStatus('Subscribing to FAKEPACA...')
+      const response = await fetch(`${BACKEND_URL}/ws_manager/FAKEPACA`)
       const result = await response.json()
       
       if (result.status === 'subscribed') {
@@ -43,7 +43,7 @@ function App() {
 
   const startStreaming = () => {
     if (!isSubscribed) {
-      setStatus('❌ Please subscribe to AAPL first')
+      setStatus('❌ Please subscribe to FAKEPACA first')
       return
     }
 
@@ -52,18 +52,30 @@ function App() {
     }
 
     setStatus('Starting SSE connection...')
-    const eventSource = new EventSource(`${BACKEND_URL}/stream/AAPL`)
+    const eventSource = new EventSource(`${BACKEND_URL}/stream/FAKEPACA`)
     eventSourceRef.current = eventSource
 
     eventSource.onopen = () => {
       setIsStreaming(true)
-      setStatus('🔴 Live streaming AAPL data')
+      setStatus('🔴 Live streaming FAKEPACA data')
     }
 
     eventSource.onmessage = (event) => {
       try {
+        console.log('SSE data received:', event.data)
         const data: StockData = JSON.parse(event.data)
-        setStockData(prev => [data, ...prev.slice(0, 9)]) // Keep last 10 updates
+        console.log('Parsed SSE data:', data)
+        setStockData(prev => {
+          if (!prev) {
+            return data
+          }
+          // Merge candles data and update timestamp
+          return {
+            ...prev,
+            candles: { ...prev.candles, ...data.candles },
+            update_timestamp: data.update_timestamp || new Date().toISOString()
+          }
+        })
       } catch (error) {
         console.error('Error parsing SSE data:', error)
       }
@@ -110,7 +122,7 @@ function App() {
                 opacity: isSubscribed ? 0.6 : 1
               }}
             >
-              {isSubscribed ? '✅ Subscribed to AAPL' : 'Subscribe to AAPL'}
+              {isSubscribed ? '✅ Subscribed to FAKEPACA' : 'Subscribe to FAKEPACA'}
             </button>
             
             {!isStreaming ? (
@@ -131,57 +143,52 @@ function App() {
 
         <div className="card" style={{ textAlign: 'left' }}>
           <h2>Live Data Stream</h2>
-          {stockData.length === 0 ? (
+          {!stockData ? (
             <p>No data received yet...</p>
           ) : (
-            <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
-              {stockData.map((data, index) => (
-                <div key={index} style={{ 
-                  border: '1px solid #ddd', 
-                  padding: '10px', 
-                  marginBottom: '10px',
-                  backgroundColor: index === 0 ? '#2a2a2a' : '#1a1a1a',
-                  color: '#ffffff',
-                  borderRadius: '8px'
-                }}>
-                  <div style={{ marginBottom: '8px' }}>
-                    <strong style={{ color: '#61dafb' }}>Symbol:</strong> {data.symbol}
-                  </div>
-                  <div style={{ marginBottom: '8px' }}>
-                    <strong style={{ color: '#61dafb' }}>Timestamp:</strong> {data.update_timestamp ? new Date(data.update_timestamp * 1000).toLocaleTimeString() : new Date().toLocaleTimeString()}
-                  </div>
-                  {data.candles && Object.keys(data.candles).length > 0 && (
-                    <div>
-                      <strong style={{ color: '#61dafb' }}>OHLCV Data ({Object.keys(data.candles).length} candles):</strong>
-                      <div style={{ marginLeft: '20px', marginTop: '5px', maxHeight: '200px', overflowY: 'auto' }}>
-                        {Object.entries(data.candles)
-                          .sort(([a], [b]) => parseInt(b) - parseInt(a)) // Sort by timestamp descending (latest first)
-                          .map(([timestamp, candle]) => (
-                            <div key={timestamp} style={{ 
-                              marginBottom: '10px', 
-                              padding: '8px', 
-                              border: '1px solid #444', 
-                              borderRadius: '4px',
-                              backgroundColor: '#333'
-                            }}>
-                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '0.9em' }}>
-                                <div><strong>Open:</strong> <span style={{ color: '#4CAF50' }}>${candle.open?.toFixed(2)}</span></div>
-                                <div><strong>High:</strong> <span style={{ color: '#4CAF50' }}>${candle.high?.toFixed(2)}</span></div>
-                                <div><strong>Low:</strong> <span style={{ color: '#f44336' }}>${candle.low?.toFixed(2)}</span></div>
-                                <div><strong>Close:</strong> <span style={{ color: candle.close > candle.open ? '#4CAF50' : '#f44336' }}>${candle.close?.toFixed(2)}</span></div>
-                                <div style={{ gridColumn: 'span 2' }}><strong>Volume:</strong> <span style={{ color: '#ff9800' }}>{candle.volume?.toLocaleString()}</span></div>
-                                <div style={{ gridColumn: 'span 2', fontSize: '0.8em', color: '#888' }}>
-                                  Time: {new Date(parseInt(timestamp)).toLocaleString()}
-                                </div>
-                              </div>
+            <div style={{ 
+              border: '1px solid #ddd', 
+              padding: '10px', 
+              backgroundColor: '#2a2a2a',
+              color: '#ffffff',
+              borderRadius: '8px'
+            }}>
+              <div style={{ marginBottom: '8px' }}>
+                <strong style={{ color: '#61dafb' }}>Symbol:</strong> {stockData.symbol}
+              </div>
+              <div style={{ marginBottom: '8px' }}>
+                <strong style={{ color: '#61dafb' }}>Last Updated:</strong> {stockData.update_timestamp || new Date().toISOString()}
+              </div>
+              {stockData.candles && Object.keys(stockData.candles).length > 0 && (
+                <div>
+                  <strong style={{ color: '#61dafb' }}>OHLCV Data ({Object.keys(stockData.candles).length} candles):</strong>
+                  <div style={{ marginLeft: '20px', marginTop: '5px', maxHeight: '300px', overflowY: 'auto' }}>
+                    {Object.entries(stockData.candles)
+                      .sort(([a], [b]) => b.localeCompare(a)) // Sort by timestamp descending (latest first)
+                      .map(([timestamp, candle]) => (
+                        <div key={timestamp} style={{ 
+                          marginBottom: '10px', 
+                          padding: '8px', 
+                          border: '1px solid #444', 
+                          borderRadius: '4px',
+                          backgroundColor: '#333'
+                        }}>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '0.9em' }}>
+                            <div><strong>Open:</strong> <span style={{ color: '#4CAF50' }}>${candle.open?.toFixed(2)}</span></div>
+                            <div><strong>High:</strong> <span style={{ color: '#4CAF50' }}>${candle.high?.toFixed(2)}</span></div>
+                            <div><strong>Low:</strong> <span style={{ color: '#f44336' }}>${candle.low?.toFixed(2)}</span></div>
+                            <div><strong>Close:</strong> <span style={{ color: candle.close > candle.open ? '#4CAF50' : '#f44336' }}>${candle.close?.toFixed(2)}</span></div>
+                            <div style={{ gridColumn: 'span 2' }}><strong>Volume:</strong> <span style={{ color: '#ff9800' }}>{candle.volume?.toLocaleString()}</span></div>
+                            <div style={{ gridColumn: 'span 2', fontSize: '0.8em', color: '#888' }}>
+                              Candle Time: {timestamp}
                             </div>
-                          ))
-                        }
-                      </div>
-                    </div>
-                  )}
+                          </div>
+                        </div>
+                      ))
+                    }
+                  </div>
                 </div>
-              ))}
+              )}
             </div>
           )}
         </div>

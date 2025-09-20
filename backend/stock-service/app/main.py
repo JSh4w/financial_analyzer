@@ -1,7 +1,10 @@
 """Main backend application using FastAPI for stock analysis"""
 import json
 import asyncio
+import time
+import functools
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from logging import getLogger
 from typing import Dict, List
 from dotenv import load_dotenv
@@ -10,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
 from app.config import Settings
+from app.utils import time_function
 from app.stocks.websocket_manager import WebSocketManager
 from app.stocks.data_aggregator import TradeDataAggregator
 from app.database.duckdb_manager import DuckDBManager
@@ -46,22 +50,31 @@ async def remove_sse_connection(symbol: str, queue: asyncio.Queue):
         except ValueError:
             pass  # Queue not in list
 
+@time_function("broadcast_update")
 def broadcast_update(update_data: dict):
     """Broadcast update to all SSE connections for a symbol"""
     symbol = update_data.get("symbol")
+    
     if symbol and symbol in active_sse_connections:
+        connection_count = len(active_sse_connections[symbol])
+        
         # Remove any dead connections while broadcasting
         dead_queues = []
+        successful_broadcasts = 0
+        
         for queue in active_sse_connections[symbol]:
             try:
                 # Use put_nowait to avoid blocking
                 queue.put_nowait(update_data)
+                successful_broadcasts += 1
             except asyncio.QueueFull:
                 # Mark for removal if queue is full
                 dead_queues.append(queue)
-            except Exception:
+                logger.warning(f"SSE queue full for {symbol}, removing connection")
+            except Exception as e:
                 # Mark for removal if any other error
                 dead_queues.append(queue)
+                logger.warning(f"SSE broadcast error for {symbol}: {e}")
 
         # Clean up dead connections
         for dead_queue in dead_queues:
@@ -69,6 +82,10 @@ def broadcast_update(update_data: dict):
                 active_sse_connections[symbol].remove(dead_queue)
             except ValueError:
                 pass
+        
+        logger.debug(f"Broadcasted to {successful_broadcasts}/{connection_count} SSE connections for {symbol}")
+    else:
+        logger.debug(f"No SSE connections for symbol {symbol}")
 
 async def connect_to_websocket_manager(output_queue=None):
     """Connect to the WebSocketManager and return it started"""
@@ -156,7 +173,7 @@ async def status():
     return {"message":f"{output}"}
 
 @app.get("/ws_manager/{symbol}")
-async def subscribe_to_apple(symbol : str):
+async def subscribe_to_symbol(symbol : str):
     """Subscribe to symbol stock data"""
     global GLOBAL_WS_MANAGER
 
@@ -165,12 +182,12 @@ async def subscribe_to_apple(symbol : str):
 
     try:
         await GLOBAL_WS_MANAGER.enqueue_subscription(symbol, 123)
-        return {"message": "Subscribed to AAPL successfully", "status": "subscribed", "symbol": symbol}
+        return {"message": "Subscribed to symbol successfully", "status": "subscribed", "symbol": symbol}
     except Exception as e:
         return {"message": f"Failed to subscribe to {symbol}: {str(e)}", "status": "error"}
 
-@app.get("/ws_manager/close")
-async def unsubscribe_from_apple():
+@app.get("/ws_manager/close/{symbol}")
+async def unsubscribe_to_symbol(symbol : str):
     """Unsubscribe from AAPL stock data"""
     global GLOBAL_WS_MANAGER
 
@@ -178,11 +195,11 @@ async def unsubscribe_from_apple():
         return {"message": "WebSocket manager is not running", "status": "not_running"}
 
     try:
-        await GLOBAL_WS_MANAGER.enqueue_unsubscription("AAPL", 123)
+        await GLOBAL_WS_MANAGER.enqueue_unsubscription(symbol, 123)
         return {
-        "message": "Unsubscribed from AAPL successfully",
+        "message": "Unsubscribed from symbol successfully",
         "status": "unsubscribed", 
-        "symbol": "AAPL",
+        "symbol": symbol,
         }
     except Exception as e:
         return {"message": f"Failed to unsubscribe from AAPL: {str(e)}", "status": "error"}
@@ -274,7 +291,7 @@ async def stream_stock_data(symbol: str):
         initial_data = {
             "symbol": symbol,
             "candles": stock_handler.candle_data,
-            "update_timestamp": asyncio.get_event_loop().time()
+            "update_timestamp": datetime.now(timezone.utc).isoformat()
         }
         await sse_queue.put(initial_data)
 
