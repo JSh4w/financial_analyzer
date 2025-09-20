@@ -11,8 +11,12 @@ build/
 # Environment variables
 .env
 
-# Python cache files 
+# Python cache files
 *.pyc
+*.pyo
+__pycache__/
+*.py[cod]
+*$py.class
 
 frontend_src_migrate/
 
