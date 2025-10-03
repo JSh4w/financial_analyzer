@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import './App.css'
+import StockChart from './components/StockChart'
 
 interface StockData {
   symbol: string
@@ -24,12 +25,13 @@ function App() {
 
   const BACKEND_URL = 'http://localhost:8001'
 
-  const subscribeToApple = async () => {
+  const subscribeToStock = async () => {
+    const symbol = 'FAKEPACA' // Using fake data for testing
     try {
-      setStatus('Subscribing to FAKEPACA...')
-      const response = await fetch(`${BACKEND_URL}/ws_manager/FAKEPACA`)
+      setStatus(`Subscribing to ${symbol}...`)
+      const response = await fetch(`${BACKEND_URL}/ws_manager/${symbol}`)
       const result = await response.json()
-      
+
       if (result.status === 'subscribed') {
         setIsSubscribed(true)
         setStatus(`✅ ${result.message}`)
@@ -42,8 +44,9 @@ function App() {
   }
 
   const startStreaming = () => {
+    const symbol = 'FAKEPACA' // Same symbol as subscription
     if (!isSubscribed) {
-      setStatus('❌ Please subscribe to FAKEPACA first')
+      setStatus(`❌ Please subscribe to ${symbol} first`)
       return
     }
 
@@ -52,12 +55,12 @@ function App() {
     }
 
     setStatus('Starting SSE connection...')
-    const eventSource = new EventSource(`${BACKEND_URL}/stream/FAKEPACA`)
+    const eventSource = new EventSource(`${BACKEND_URL}/stream/${symbol}`)
     eventSourceRef.current = eventSource
 
     eventSource.onopen = () => {
       setIsStreaming(true)
-      setStatus('🔴 Live streaming FAKEPACA data')
+      setStatus(`🔴 Live streaming ${symbol} data`)
     }
 
     eventSource.onmessage = (event) => {
@@ -113,10 +116,10 @@ function App() {
         <div className="card" style={{ textAlign: 'left' }}>
           <h2>Controls</h2>
           <div style={{ marginBottom: '20px' }}>
-            <button 
-              onClick={subscribeToApple}
+            <button
+              onClick={subscribeToStock}
               disabled={isSubscribed}
-              style={{ 
+              style={{
                 marginRight: '10px',
                 backgroundColor: isSubscribed ? '#4CAF50' : '#008CBA',
                 opacity: isSubscribed ? 0.6 : 1
@@ -141,8 +144,19 @@ function App() {
           </div>
         </div>
 
+        {/* ECharts Stock Visualization */}
+        {stockData && stockData.candles && Object.keys(stockData.candles).length > 0 && (
+          <div className="card" style={{ textAlign: 'left' }}>
+            <h2>Live Stock Chart</h2>
+            <StockChart
+              symbol={stockData.symbol}
+              candles={stockData.candles}
+            />
+          </div>
+        )}
+
         <div className="card" style={{ textAlign: 'left' }}>
-          <h2>Live Data Stream</h2>
+          <h2>Raw Data Stream</h2>
           {!stockData ? (
             <p>No data received yet...</p>
           ) : (
