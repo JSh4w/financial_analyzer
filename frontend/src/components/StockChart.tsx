@@ -114,19 +114,22 @@ const StockChart: React.FC<StockChartProps> = ({ symbol, candles }) => {
         {
           left: '10%',
           right: '8%',
-          height: '60%'
+          top: '12%',
+          height: '48%'
         },
         {
           left: '10%',
           right: '8%',
-          top: '75%',
-          height: '16%'
+          top: '65%',
+          height: '15%',
+          bottom: '15%'
         }
       ],
       xAxis: [
         {
           type: 'category',
           data: dates,
+          boundaryGap: true,
           axisLine: { lineStyle: { color: '#777' } },
           axisLabel: { color: '#ffffff' }
         },
@@ -134,6 +137,7 @@ const StockChart: React.FC<StockChartProps> = ({ symbol, candles }) => {
           type: 'category',
           gridIndex: 1,
           data: dates,
+          boundaryGap: true,
           axisLine: { lineStyle: { color: '#777' } },
           axisLabel: { color: '#ffffff' }
         }
@@ -157,17 +161,27 @@ const StockChart: React.FC<StockChartProps> = ({ symbol, candles }) => {
         {
           type: 'inside',
           xAxisIndex: [0, 1],
-          start: Math.max(0, 100 - (dates.length * 10)), // Show last 10 candles by default
+          start: dates.length > 20 ? ((dates.length - 20) / dates.length) * 100 : 0,
           end: 100
         },
         {
           show: true,
           xAxisIndex: [0, 1],
           type: 'slider',
-          top: '95%',
-          start: Math.max(0, 100 - (dates.length * 10)),
+          bottom: '1%',
+          height: 25,
+          start: dates.length > 20 ? ((dates.length - 20) / dates.length) * 100 : 0,
           end: 100,
-          textStyle: { color: '#ffffff' }
+          textStyle: { color: '#ffffff' },
+          handleStyle: {
+            color: '#61dafb'
+          },
+          borderColor: '#444',
+          fillerColor: 'rgba(97, 218, 251, 0.2)',
+          dataBackground: {
+            lineStyle: { color: '#61dafb' },
+            areaStyle: { color: 'rgba(97, 218, 251, 0.1)' }
+          }
         }
       ],
       series: [
@@ -175,6 +189,8 @@ const StockChart: React.FC<StockChartProps> = ({ symbol, candles }) => {
           name: 'Candlestick',
           type: 'candlestick',
           data: candlestickData,
+          barMaxWidth: 50,
+          barCategoryGap: '2px',  // Fixed pixel gap
           itemStyle: {
             color: '#4CAF50',      // Rising candles (green)
             color0: '#f44336',     // Falling candles (red)
@@ -199,6 +215,8 @@ const StockChart: React.FC<StockChartProps> = ({ symbol, candles }) => {
           xAxisIndex: 1,
           yAxisIndex: 1,
           data: volumeData,
+          barMaxWidth: 50,
+          barCategoryGap: '2px',  // Match candlestick gap
           itemStyle: {
             color: function(params: any) {
               const index = params.dataIndex
@@ -217,7 +235,8 @@ const StockChart: React.FC<StockChartProps> = ({ symbol, candles }) => {
       ]
     }
 
-    chartInstance.current.setOption(option, true)
+    // Use notMerge: false to allow smooth updates
+    chartInstance.current.setOption(option, { notMerge: false, lazyUpdate: false })
 
     // Handle window resize
     const handleResize = () => {

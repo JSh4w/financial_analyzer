@@ -17,6 +17,7 @@ interface StockData {
 }
 
 function App() {
+  const [symbol, setSymbol] = useState('FAKEPACA')
   const [isSubscribed, setIsSubscribed] = useState(false)
   const [isStreaming, setIsStreaming] = useState(false)
   const [stockData, setStockData] = useState<StockData | null>(null)
@@ -26,7 +27,6 @@ function App() {
   const BACKEND_URL = 'http://localhost:8001'
 
   const subscribeToStock = async () => {
-    const symbol = 'FAKEPACA' // Using fake data for testing
     try {
       setStatus(`Subscribing to ${symbol}...`)
       const response = await fetch(`${BACKEND_URL}/ws_manager/${symbol}`)
@@ -44,7 +44,6 @@ function App() {
   }
 
   const startStreaming = () => {
-    const symbol = 'FAKEPACA' // Same symbol as subscription
     if (!isSubscribed) {
       setStatus(`❌ Please subscribe to ${symbol} first`)
       return
@@ -69,10 +68,19 @@ function App() {
         const data: StockData = JSON.parse(event.data)
         console.log('Parsed SSE data:', data)
         setStockData(prev => {
+          // If this is an initial snapshot, replace all data
+          if ((data as any).is_initial) {
+            console.log('Received initial snapshot with', Object.keys(data.candles || {}).length, 'candles')
+            return data
+          }
+
+          // Otherwise, merge delta updates
           if (!prev) {
             return data
           }
-          // Merge candles data and update timestamp
+
+          console.log('Merging delta update with', Object.keys(data.candles || {}).length, 'new candles')
+          // Merge candles data (delta updates) and update timestamp
           return {
             ...prev,
             candles: { ...prev.candles, ...data.candles },
@@ -116,16 +124,31 @@ function App() {
         <div className="card" style={{ textAlign: 'left' }}>
           <h2>Controls</h2>
           <div style={{ marginBottom: '20px' }}>
+            <input
+              type="text"
+              value={symbol}
+              onChange={(e) => setSymbol(e.target.value.toUpperCase())}
+              placeholder="Enter stock symbol (e.g., AAPL)"
+              disabled={isSubscribed || isStreaming}
+              style={{
+                padding: '10px',
+                marginRight: '10px',
+                fontSize: '16px',
+                width: '200px',
+                borderRadius: '4px',
+                border: '1px solid #ccc'
+              }}
+            />
             <button
               onClick={subscribeToStock}
-              disabled={isSubscribed}
+              disabled={isSubscribed || !symbol.trim()}
               style={{
                 marginRight: '10px',
                 backgroundColor: isSubscribed ? '#4CAF50' : '#008CBA',
-                opacity: isSubscribed ? 0.6 : 1
+                opacity: isSubscribed || !symbol.trim() ? 0.6 : 1
               }}
             >
-              {isSubscribed ? '✅ Subscribed to FAKEPACA' : 'Subscribe to FAKEPACA'}
+              {isSubscribed ? `✅ Subscribed to ${symbol}` : `Subscribe to ${symbol}`}
             </button>
             
             {!isStreaming ? (
