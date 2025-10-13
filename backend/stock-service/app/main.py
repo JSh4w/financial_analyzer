@@ -16,6 +16,8 @@ from app.config import Settings
 from app.utils import time_function
 from app.stocks.websocket_manager import WebSocketManager
 from app.stocks.data_aggregator import TradeDataAggregator
+from app.stocks.historical_data import AlpacaHistoricalData
+from app.stocks.subscription_manager import SubscriptionManager
 from app.database.duckdb_manager import DuckDBManager
 from core.logging import setup_logging
 
@@ -28,8 +30,12 @@ settings = Settings()
 
 # Global instances
 GLOBAL_WS_MANAGER = None
+GLOBAL_DEMO_WS_MANAGER = None
 GLOBAL_DATA_AGGREGATOR = None
 GLOBAL_DB_MANAGER = None
+GLOBAL_SUBSCRIPTION_MANAGER = None
+GLOBAL_DEMO_SUBSCRIPTION_MANAGER = None
+
 
 # SSE connection management
 active_sse_connections: Dict[str, List[asyncio.Queue]] = {}
@@ -54,19 +60,25 @@ async def remove_sse_connection(symbol: str, queue: asyncio.Queue):
 def broadcast_update(update_data: dict):
     """Broadcast update to all SSE connections for a symbol"""
     symbol = update_data.get("symbol")
-    
+    is_initial = update_data.get("is_initial", False)
+
     if symbol and symbol in active_sse_connections:
         connection_count = len(active_sse_connections[symbol])
-        
+
         # Remove any dead connections while broadcasting
         dead_queues = []
         successful_broadcasts = 0
-        
+
         for queue in active_sse_connections[symbol]:
             try:
-                # Use put_nowait to avoid blocking
-                queue.put_nowait(update_data)
-                successful_broadcasts += 1
+                # For delta updates, only send to already-initialized connections
+                # For initial updates, send to all connections
+                if is_initial or hasattr(queue, '_initialized'):
+                    queue.put_nowait(update_data)
+                    successful_broadcasts += 1
+                    # Mark queue as initialized after first message
+                    if is_initial:
+                        queue._initialized = True
             except asyncio.QueueFull:
                 # Mark for removal if queue is full
                 dead_queues.append(queue)
@@ -82,14 +94,14 @@ def broadcast_update(update_data: dict):
                 active_sse_connections[symbol].remove(dead_queue)
             except ValueError:
                 pass
-        
+
         logger.debug(f"Broadcasted to {successful_broadcasts}/{connection_count} SSE connections for {symbol}")
     else:
         logger.debug(f"No SSE connections for symbol {symbol}")
 
-async def connect_to_websocket_manager(output_queue=None):
+async def connect_to_websocket_manager(uri = None,output_queue=None):
     """Connect to the WebSocketManager and return it started"""
-    ws_manager = WebSocketManager(output_queue=output_queue)
+    ws_manager = WebSocketManager(uri = uri, output_queue=output_queue)
     try:
         await ws_manager.start()
         print("websocket manager started")
@@ -102,7 +114,7 @@ async def connect_to_websocket_manager(output_queue=None):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """FastAPI lifespan manager - startup and shutdown events"""
-    global GLOBAL_WS_MANAGER, GLOBAL_DATA_AGGREGATOR, GLOBAL_DB_MANAGER
+    global GLOBAL_WS_MANAGER, GLOBAL_DATA_AGGREGATOR, GLOBAL_DB_MANAGER, GLOBAL_DEMO_WS_MANAGER, GLOBAL_SUBSCRIPTION_MANAGER, GLOBAL_DEMO_SUBSCRIPTION_MANAGER
 
     # STARTUP: Initialize components when app starts
     logger.info("Starting application components...")
@@ -113,20 +125,43 @@ async def lifespan(app: FastAPI):
     # Websocket queue, max number of stocks
     shared_queue = asyncio.Queue(500)
 
+    # Initialize historical data fetcher
+    historical_fetcher = AlpacaHistoricalData(
+        api_key=settings.ALPACA_API_KEY,
+        api_secret=settings.ALPACA_API_SECRET
+    )
 
     # Initialize data aggregator with all components
     GLOBAL_DATA_AGGREGATOR = TradeDataAggregator(
         input_queue=shared_queue,
         broadcast_callback=broadcast_update,
-        db_manager=GLOBAL_DB_MANAGER
+        db_manager=GLOBAL_DB_MANAGER,
+        historical_fetcher=historical_fetcher
     )
 
     # Start processing task
     asyncio.create_task(GLOBAL_DATA_AGGREGATOR.process_tick_queue())
 
     # Initialize WebSocket manager with the shared queue
-    GLOBAL_WS_MANAGER = await connect_to_websocket_manager(output_queue=shared_queue)
+    # "wss://stream.data.alpaca.markets/v2/test for FAKEPACA
+    # "wss://stream.data.alpaca.markets/v2/iex"
+    GLOBAL_WS_MANAGER = await connect_to_websocket_manager(uri="wss://stream.data.alpaca.markets/v2/iex", output_queue=shared_queue)
+    GLOBAL_DEMO_WS_MANAGER = await connect_to_websocket_manager(uri="wss://stream.data.alpaca.markets/v2/test", output_queue=shared_queue)
 
+    # Initialize SubscriptionManager (source of truth for subscriptions)
+    GLOBAL_SUBSCRIPTION_MANAGER = SubscriptionManager(
+        subscribe_callback=GLOBAL_WS_MANAGER.subscribe,
+        unsubscribe_callback=GLOBAL_WS_MANAGER.unsubscribe,
+        on_handler_create_callback=GLOBAL_DATA_AGGREGATOR.ensure_handler_exists
+    )
+
+    GLOBAL_DEMO_SUBSCRIPTION_MANAGER = SubscriptionManager(
+        subscribe_callback=GLOBAL_DEMO_WS_MANAGER.subscribe,
+        unsubscribe_callback=GLOBAL_DEMO_WS_MANAGER.unsubscribe,
+        on_handler_create_callback=GLOBAL_DATA_AGGREGATOR.ensure_handler_exists
+    )
+
+    logger.info("SubscriptionManager initialized and wired")
     yield  # App runs here
 
     # SHUTDOWN: Clean up when app stops
@@ -138,6 +173,10 @@ async def lifespan(app: FastAPI):
     if GLOBAL_WS_MANAGER:
         await GLOBAL_WS_MANAGER.stop()
         GLOBAL_WS_MANAGER = None
+    
+    if GLOBAL_DEMO_WS_MANAGER:
+        await GLOBAL_DEMO_WS_MANAGER.stop()
+        GLOBAL_DEMO_WS_MANAGER = None
 
     if GLOBAL_DB_MANAGER:
         GLOBAL_DB_MANAGER.close()
@@ -174,35 +213,52 @@ async def status():
 
 @app.get("/ws_manager/{symbol}")
 async def subscribe_to_symbol(symbol : str):
-    """Subscribe to symbol stock data"""
-    global GLOBAL_WS_MANAGER
+    """Subscribe to symbol stock data via SubscriptionManager"""
+    global GLOBAL_SUBSCRIPTION_MANAGER, GLOBAL_DEMO_SUBSCRIPTION_MANAGER
 
-    if GLOBAL_WS_MANAGER is None:
-        return {"message": "WebSocket manager is not running", "status": "error"}
+    # Use demo manager for FAKEPACA, otherwise use production manager
+    subscription_manager = GLOBAL_DEMO_SUBSCRIPTION_MANAGER if symbol == "FAKEPACA" else GLOBAL_SUBSCRIPTION_MANAGER
+
+    if subscription_manager is None:
+        return {"message": "Subscription manager is not running", "status": "error"}
 
     try:
-        await GLOBAL_WS_MANAGER.enqueue_subscription(symbol, 123)
-        return {"message": "Subscribed to symbol successfully", "status": "subscribed", "symbol": symbol}
+        # SubscriptionManager orchestrates: StockHandler creation + WebSocket subscription
+        success = await subscription_manager.add_user_subscription(user_id=123, symbol=symbol, subscription_type='trades')
+
+        if success:
+            return {"message": "Subscribed to symbol successfully", "status": "subscribed", "symbol": symbol}
+        else:
+            return {"message": f"Failed to subscribe to {symbol}", "status": "error"}
     except Exception as e:
+        logger.error(f"Subscription error for {symbol}: {e}")
         return {"message": f"Failed to subscribe to {symbol}: {str(e)}", "status": "error"}
 
 @app.get("/ws_manager/close/{symbol}")
 async def unsubscribe_to_symbol(symbol : str):
-    """Unsubscribe from AAPL stock data"""
-    global GLOBAL_WS_MANAGER
+    """Unsubscribe from symbol stock data via SubscriptionManager"""
+    global GLOBAL_SUBSCRIPTION_MANAGER, GLOBAL_DEMO_SUBSCRIPTION_MANAGER
 
-    if GLOBAL_WS_MANAGER is None:
-        return {"message": "WebSocket manager is not running", "status": "not_running"}
+    # Use demo manager for FAKEPACA, otherwise use production manager
+    subscription_manager = GLOBAL_DEMO_SUBSCRIPTION_MANAGER if symbol == "FAKEPACA" else GLOBAL_SUBSCRIPTION_MANAGER
+
+    if subscription_manager is None:
+        return {"message": "Subscription manager is not running", "status": "not_running"}
 
     try:
-        await GLOBAL_WS_MANAGER.enqueue_unsubscription(symbol, 123)
-        return {
-        "message": "Unsubscribed from symbol successfully",
-        "status": "unsubscribed", 
-        "symbol": symbol,
-        }
+        success = await subscription_manager.remove_user_subscription(user_id=123, symbol=symbol, subscription_type='trades')
+
+        if success:
+            return {
+                "message": "Unsubscribed from symbol successfully",
+                "status": "unsubscribed",
+                "symbol": symbol,
+            }
+        else:
+            return {"message": f"Failed to unsubscribe from {symbol}", "status": "error"}
     except Exception as e:
-        return {"message": f"Failed to unsubscribe from AAPL: {str(e)}", "status": "error"}
+        logger.error(f"Unsubscription error for {symbol}: {e}")
+        return {"message": f"Failed to unsubscribe from {symbol}: {str(e)}", "status": "error"}
 
 # Data Aggregator Endpoints
 @app.get("/aggregator/status")
@@ -285,15 +341,18 @@ async def stream_stock_data(symbol: str):
     sse_queue = asyncio.Queue(maxsize=10)
     await add_sse_connection(symbol, sse_queue)
 
-    # Send initial data immediately
+    # Send initial data immediately (full snapshot)
     stock_handler = GLOBAL_DATA_AGGREGATOR.get_stock_handler(symbol)
     if stock_handler and stock_handler.candle_data:
         initial_data = {
             "symbol": symbol,
             "candles": stock_handler.candle_data,
-            "update_timestamp": datetime.now(timezone.utc).isoformat()
+            "update_timestamp": datetime.now(timezone.utc).isoformat(),
+            "is_initial": True
         }
         await sse_queue.put(initial_data)
+        # Mark this queue as initialized
+        sse_queue._initialized = True
 
     async def event_stream():
         try:

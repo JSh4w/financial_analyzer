@@ -1,6 +1,7 @@
 """Processes tick data on a per symbol basis"""
 from typing import Dict, Any, Optional, Callable, List
 import logging
+import asyncio
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -13,7 +14,7 @@ class StockHandler():
         self._ohlcv: Dict[str, Dict[str, Any]] = {}  # minute timestamp -> OHLCV data
         self.db_manager = db_manager
         self.on_update_callback = on_update_callback
-        
+
         # Load recent data from database on initialization
         logger.info("INIT AGAIN")
         if self.db_manager:
@@ -112,9 +113,12 @@ class StockHandler():
                 self.db_manager.upsert_candle(self._symbol, prev_timestamp, prev_candle)
                 logger.debug(f"Saved completed candle for {self._symbol} at {prev_timestamp}")
 
-        # Trigger update callback if set
+        # Trigger update callback if set - send only the updated candle(s)
         if self.on_update_callback:
-            self.on_update_callback(self._symbol, self._ohlcv)
+            # Send only the most recent 2 candles (current + previous if new)
+            sorted_timestamps = sorted(self._ohlcv.keys(), reverse=True)
+            delta_candles = {ts: self._ohlcv[ts] for ts in sorted_timestamps[:2]}
+            self.on_update_callback(self._symbol, delta_candles, is_initial=False)
 
     def save_to_database(self):
         """Bulk save all in-memory data to database"""
@@ -131,3 +135,31 @@ class StockHandler():
     def candle_data(self):
         """OHLCV data"""
         return self._ohlcv
+
+    async def load_historical_data(self, historical_bars: Dict[str, Dict[str, Any]]):
+        """
+        Load historical bar data into the handler
+        No lock needed - asyncio cooperative concurrency ensures atomic dict operations
+
+        Args:
+            historical_bars: Dictionary of timestamp -> OHLCV data
+        """
+        # Batch update: much faster than item-by-item
+        # Filter out timestamps that already exist (don't overwrite live data)
+        new_bars = {ts: bar for ts, bar in historical_bars.items() if ts not in self._ohlcv}
+        self._ohlcv.update(new_bars)
+
+        logger.info(f"Loaded {len(new_bars)} new historical bars for {self._symbol}")
+
+        # Optionally save to database IN BACKGROUND (don't block async code)
+        if self.db_manager and new_bars:
+            # Run synchronous DB operation in thread pool to avoid blocking
+            await asyncio.to_thread(
+                self.db_manager.bulk_upsert_candles,
+                self._symbol,
+                new_bars
+            )
+
+        # Trigger callback to notify frontend of initial data (send all candles)
+        if self.on_update_callback:
+            self.on_update_callback(self._symbol, self._ohlcv, is_initial=True)

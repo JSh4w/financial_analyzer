@@ -1,13 +1,17 @@
 """A manager class to decouple subscription handling from the websocket class
 . This maintains seperation of tasks and reduced function calls to the websocket manager """
-from asyncio import Awaitable
-from typing import Callable, Dict, Set, Tuple
+from collections.abc import Awaitable
+from typing import Callable, Dict, Set, Tuple, Optional
+import logging
+
+logger = logging.getLogger(__name__)
 
 class SubscriptionManager:
     def __init__(self,
     user_subscriptions: Dict[int, Set[Tuple[str, str]]] = None,
     subscribe_callback: Callable[[str, int, str], Awaitable[bool]] = None,
     unsubscribe_callback: Callable[[str, int, str], Awaitable[bool]] = None,
+    on_handler_create_callback: Optional[Callable[[str], Awaitable[None]]] = None,
     ):
         # the user_subscriptions is the source of truth for the websocket manager
         # i.e this class takes precedence
@@ -15,14 +19,33 @@ class SubscriptionManager:
         self.user_subscriptions = user_subscriptions or {}
         self.subscribe_callback = subscribe_callback
         self.unsubscribe_callback = unsubscribe_callback
+        self.on_handler_create_callback = on_handler_create_callback
 
     async def add_user_subscription(self, user_id: int, symbol: str, subscription_type: str = 'trades') -> bool:
-        """Add a subscription for a user to a symbol with specific type"""
+        """
+        Add a subscription for a user to a symbol with specific type.
+        Orchestrates:
+        1. Creating StockHandler (via on_handler_create_callback)
+        2. Subscribing to WebSocket (via subscribe_callback)
+        """
+        symbol = symbol.upper()
+
+        # Step 1: Ensure StockHandler exists and loads historical data
+        if self.on_handler_create_callback:
+            try:
+                await self.on_handler_create_callback(symbol)
+                logger.info(f"Handler creation triggered for {symbol}")
+            except Exception as e:
+                logger.error(f"Failed to create handler for {symbol}: {e}")
+                # Continue anyway - websocket might still succeed
+
+        # Step 2: Subscribe via WebSocket
         if self.subscribe_callback:
             success = await self.subscribe_callback(symbol, user_id, subscription_type)
             if success:
                 # non-atomic, relies on unique user-id access
                 self.user_subscriptions.setdefault(user_id, set()).add((symbol, subscription_type))
+                logger.info(f"User {user_id} subscribed to {symbol} ({subscription_type})")
             return success
         return False
 

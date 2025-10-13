@@ -21,6 +21,7 @@ class TradeData():
     t: str       # RFC-3339 formatted timestamp with nanosecond precision
     z: str       # tape
 
+    # Note: can use asdict built in method instead
     def data_to_dict(self) -> Dict[str, any]:
         """For serialisation at EoD"""
         return {
