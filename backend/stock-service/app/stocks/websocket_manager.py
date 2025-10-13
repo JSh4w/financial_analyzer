@@ -81,17 +81,18 @@ class WebSocketManager:
         output_queue = asyncio.Queue(maxsize = 500),
         uri: str = None,
         headers: Dict[str, str] = None,
-        subscription_settings: AlpacaSubscriptionSettings = None):
+        subscription_settings: AlpacaSubscriptionSettings = None
+        ):
 
         #default to test environment
-        self.uri = uri or "wss://stream.data.alpaca.markets/v2/test"
-        self.headers = headers or {
+        self._uri = uri or "wss://stream.data.alpaca.markets/v2/test"
+        self._headers = headers or {
               "APCA-API-KEY-ID": settings.ALPACA_API_KEY,
               "APCA-API-SECRET-KEY": settings.ALPACA_API_SECRET
           }
         self.subscription_settings = subscription_settings or AlpacaSubscriptionSettings()
 
-        self.websocket: Optional[Any] = None
+        self._websocket: Optional[Any] = None
         self.upstream_task: Optional[asyncio.Task] = None
         self.state = ConnectionState.DISCONNECTED
         self._state_lock = asyncio.Lock()
@@ -102,17 +103,17 @@ class WebSocketManager:
 
         # symbol -> subscription_type -> users
         self.active_subscriptions: Dict[str, Dict[str, Set[int]]] = {}
-        self.subscription_task : Optional[asyncio.Task] = None
+        self._subscription_task : Optional[asyncio.Task] = None
 
-        self.max_reconnect_attempts = 3
-        self.reconnect_delay = 2
+        self._max_reconnect_attempts = 3
+        self._reconnect_delay = 2
 
         self.connection_task: Optional[asyncio.Task] = None
         self.queueing_task: Optional[asyncio.Task] = None
 
 
     async def connect(self):
-        """Try connecting to Alpaca, return if connected"""
+        """Try connecting to Alpaca, return True if connected"""
         logger.info("Attempting to connect to WebSocket")
         async with self._state_lock:
             if self.state == ConnectionState.CONNECTED:
@@ -127,7 +128,7 @@ class WebSocketManager:
 
         try:
             async with self._state_lock:
-                self.websocket = await websockets.connect(self.uri, additional_headers=self.headers)
+                self._websocket = await websockets.connect(self._uri, additional_headers=self._headers)
                 self.state = ConnectionState.CONNECTED
             logger.info("Connected to Alpaca WebSocket")
 
@@ -147,23 +148,23 @@ class WebSocketManager:
             logger.error("Connection failed, possible due to an invalid key: %s",e)
             async with self._state_lock:
                 self.state = ConnectionState.DISCONNECTED
-                self.websocket = None
+                self._websocket = None
             return False
         except Exception as e:
             logger.error("Connection failed %s",e)
             async with self._state_lock:
                 self.state = ConnectionState.DISCONNECTED
-                self.websocket = None
+                self._websocket = None
             return False
 
     async def disconnect(self):
         """Close WebSocket connection and clear attributed"""
-        if self.websocket:
+        if self._websocket:
             try:
-                await self.websocket.close()
+                await self._websocket.close()
                 async with self._state_lock:
                     self.state = ConnectionState.DISCONNECTED
-                self.websocket = None
+                self._websocket = None
             except Exception as e:
                 logger.WARNING("Issue when diconnecting Webscocket %s",e)
         else:
@@ -220,7 +221,7 @@ class WebSocketManager:
         try:
             config = self.subscription_settings.get_config(subscription_type)
             message = config.create_subscribe_message([symbol])
-            await self.websocket.send(message)
+            await self._websocket.send(message)
             logger.info("Subscribed to %s %s", symbol, subscription_type)
             return True
         except Exception as e:
@@ -272,7 +273,7 @@ class WebSocketManager:
         try:
             config = self.subscription_settings.get_config(subscription_type)
             message = config.create_unsubscribe_message([symbol])
-            await self.websocket.send(message)
+            await self._websocket.send(message)
             logger.info("Unsubscribed from %s %s", symbol, subscription_type)
             return True
         except Exception as e:
@@ -317,10 +318,10 @@ class WebSocketManager:
 
         # Handling a reconnect can be done in a couple ways realistically
         # For loop until connect or tap out ?
-        for attempt in range(1, self.max_reconnect_attempts+1):
-            logger.info("reconnect attempt %s , out of a total %s",attempt, self.max_reconnect_attempts)
+        for attempt in range(1, self._max_reconnect_attempts+1):
+            logger.info("reconnect attempt %s , out of a total %s",attempt, self._max_reconnect_attempts)
 
-            delay = self.reconnect_delay * attempt
+            delay = self._reconnect_delay * attempt
             await asyncio.sleep(delay)
 
             if await self.connect():
@@ -340,34 +341,18 @@ class WebSocketManager:
             data = json.loads(message)
 
             # Handle array of messages (Alpaca format)
+            logger.debug(f"data is {data}")
             if isinstance(data, list):
                 message_count = 0
                 for msg in data:
-                    msg_type = msg.get('T')
-                    # Check if this message type is configured
-                    for config in self.subscription_settings.get_all_configs().values():
-                        if msg_type == config.message_type_identifier:
-                            if self.output_queue:
-                                await self.output_queue.put(msg)
-                                message_count += 1
-                            break
-                    else:
-                        # Control/status messages or unknown types
-                        logger.info("Control/unknown message: %s", msg)
-
+                    if self.output_queue:
+                        await self.output_queue.put(msg)
                 if message_count > 0:
                     logger.debug(f"Queued {message_count} market data messages")
-
             else:
                 # Single message
-                msg_type = data.get('T')
-                # Check if this message type is configured
-                for config in self.subscription_settings.get_all_configs().values():
-                    if msg_type == config.message_type_identifier:
-                        if self.output_queue:
-                            await self.output_queue.put(data)
-                            logger.debug("Queued single market data message")
-                        break
+                if self.output_queue:
+                    await self.output_queue.put(msg)
                 else:
                     logger.info("Control/unknown message: %s", data)
 
@@ -384,7 +369,7 @@ class WebSocketManager:
             try:
                 await self.connect()
 
-                async for message in self.websocket:
+                async for message in self._websocket:
                     if message == 1:
                         logger.debug("Recieved ping")
                         continue

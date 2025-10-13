@@ -22,3 +22,6 @@ frontend_src_migrate/
 
 # IDE workspace files
 *.code-workspace
+
+#Research data
+inspiration/

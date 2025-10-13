@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import './App.css'
+import StockChart from './components/StockChart'
 
 interface StockData {
   symbol: string
@@ -16,6 +17,7 @@ interface StockData {
 }
 
 function App() {
+  const [symbol, setSymbol] = useState('FAKEPACA')
   const [isSubscribed, setIsSubscribed] = useState(false)
   const [isStreaming, setIsStreaming] = useState(false)
   const [stockData, setStockData] = useState<StockData | null>(null)
@@ -24,12 +26,12 @@ function App() {
 
   const BACKEND_URL = 'http://localhost:8001'
 
-  const subscribeToApple = async () => {
+  const subscribeToStock = async () => {
     try {
-      setStatus('Subscribing to FAKEPACA...')
-      const response = await fetch(`${BACKEND_URL}/ws_manager/FAKEPACA`)
+      setStatus(`Subscribing to ${symbol}...`)
+      const response = await fetch(`${BACKEND_URL}/ws_manager/${symbol}`)
       const result = await response.json()
-      
+
       if (result.status === 'subscribed') {
         setIsSubscribed(true)
         setStatus(`✅ ${result.message}`)
@@ -43,7 +45,7 @@ function App() {
 
   const startStreaming = () => {
     if (!isSubscribed) {
-      setStatus('❌ Please subscribe to FAKEPACA first')
+      setStatus(`❌ Please subscribe to ${symbol} first`)
       return
     }
 
@@ -52,12 +54,12 @@ function App() {
     }
 
     setStatus('Starting SSE connection...')
-    const eventSource = new EventSource(`${BACKEND_URL}/stream/FAKEPACA`)
+    const eventSource = new EventSource(`${BACKEND_URL}/stream/${symbol}`)
     eventSourceRef.current = eventSource
 
     eventSource.onopen = () => {
       setIsStreaming(true)
-      setStatus('🔴 Live streaming FAKEPACA data')
+      setStatus(`🔴 Live streaming ${symbol} data`)
     }
 
     eventSource.onmessage = (event) => {
@@ -66,10 +68,19 @@ function App() {
         const data: StockData = JSON.parse(event.data)
         console.log('Parsed SSE data:', data)
         setStockData(prev => {
+          // If this is an initial snapshot, replace all data
+          if ((data as any).is_initial) {
+            console.log('Received initial snapshot with', Object.keys(data.candles || {}).length, 'candles')
+            return data
+          }
+
+          // Otherwise, merge delta updates
           if (!prev) {
             return data
           }
-          // Merge candles data and update timestamp
+
+          console.log('Merging delta update with', Object.keys(data.candles || {}).length, 'new candles')
+          // Merge candles data (delta updates) and update timestamp
           return {
             ...prev,
             candles: { ...prev.candles, ...data.candles },
@@ -113,16 +124,31 @@ function App() {
         <div className="card" style={{ textAlign: 'left' }}>
           <h2>Controls</h2>
           <div style={{ marginBottom: '20px' }}>
-            <button 
-              onClick={subscribeToApple}
-              disabled={isSubscribed}
-              style={{ 
+            <input
+              type="text"
+              value={symbol}
+              onChange={(e) => setSymbol(e.target.value.toUpperCase())}
+              placeholder="Enter stock symbol (e.g., AAPL)"
+              disabled={isSubscribed || isStreaming}
+              style={{
+                padding: '10px',
+                marginRight: '10px',
+                fontSize: '16px',
+                width: '200px',
+                borderRadius: '4px',
+                border: '1px solid #ccc'
+              }}
+            />
+            <button
+              onClick={subscribeToStock}
+              disabled={isSubscribed || !symbol.trim()}
+              style={{
                 marginRight: '10px',
                 backgroundColor: isSubscribed ? '#4CAF50' : '#008CBA',
-                opacity: isSubscribed ? 0.6 : 1
+                opacity: isSubscribed || !symbol.trim() ? 0.6 : 1
               }}
             >
-              {isSubscribed ? '✅ Subscribed to FAKEPACA' : 'Subscribe to FAKEPACA'}
+              {isSubscribed ? `✅ Subscribed to ${symbol}` : `Subscribe to ${symbol}`}
             </button>
             
             {!isStreaming ? (
@@ -141,8 +167,19 @@ function App() {
           </div>
         </div>
 
+        {/* ECharts Stock Visualization */}
+        {stockData && stockData.candles && Object.keys(stockData.candles).length > 0 && (
+          <div className="card" style={{ textAlign: 'left' }}>
+            <h2>Live Stock Chart</h2>
+            <StockChart
+              symbol={stockData.symbol}
+              candles={stockData.candles}
+            />
+          </div>
+        )}
+
         <div className="card" style={{ textAlign: 'left' }}>
-          <h2>Live Data Stream</h2>
+          <h2>Raw Data Stream</h2>
           {!stockData ? (
             <p>No data received yet...</p>
           ) : (
