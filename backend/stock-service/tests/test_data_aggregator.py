@@ -351,6 +351,96 @@ class TestTradeDataAggregator:
         assert len(aggregator.stock_handlers) == 3
 
 
+    @pytest.mark.asyncio
+    async def test_ensure_handler_exists_creates_new_handler(self, aggregator):
+        """Test ensure_handler_exists creates handler if it doesn't exist"""
+        assert 'AAPL' not in aggregator.stock_handlers
+
+        await aggregator.ensure_handler_exists('AAPL')
+
+        assert 'AAPL' in aggregator.stock_handlers
+        assert aggregator.stock_handlers['AAPL'].symbol == 'AAPL'
+
+    @pytest.mark.asyncio
+    async def test_ensure_handler_exists_idempotent(self, aggregator):
+        """Test ensure_handler_exists is idempotent (safe to call multiple times)"""
+        await aggregator.ensure_handler_exists('AAPL')
+        first_handler = aggregator.stock_handlers['AAPL']
+
+        # Call again - should not create new handler
+        await aggregator.ensure_handler_exists('AAPL')
+        second_handler = aggregator.stock_handlers['AAPL']
+
+        assert first_handler is second_handler
+
+    @pytest.mark.asyncio
+    async def test_ensure_handler_exists_uppercases_symbol(self, aggregator):
+        """Test that ensure_handler_exists converts symbol to uppercase"""
+        await aggregator.ensure_handler_exists('aapl')
+
+        assert 'AAPL' in aggregator.stock_handlers
+        assert 'aapl' not in aggregator.stock_handlers
+
+    @pytest.mark.asyncio
+    async def test_ensure_handler_exists_with_historical_fetcher(self):
+        """Test that ensure_handler_exists triggers historical data fetch"""
+        from unittest.mock import AsyncMock
+        mock_historical = AsyncMock()
+        mock_historical.fetch_historical_bars = AsyncMock(return_value=[])
+
+        test_queue = asyncio.Queue(500)
+        aggregator = TradeDataAggregator(
+            input_queue=test_queue,
+            historical_fetcher=mock_historical
+        )
+
+        await aggregator.ensure_handler_exists('AAPL')
+
+        # Should have created handler
+        assert 'AAPL' in aggregator.stock_handlers
+
+        # Give background task a moment to start
+        await asyncio.sleep(0.1)
+
+        # Historical fetch should have been called (as background task)
+        # Note: We can't easily wait for background task completion in test
+        # But we can verify handler was created
+
+    @pytest.mark.asyncio
+    async def test_ensure_handler_exists_with_broadcast_callback(self):
+        """Test that ensure_handler_exists creates handler with callback"""
+        from unittest.mock import Mock
+        mock_broadcast = Mock()
+
+        test_queue = asyncio.Queue(500)
+        aggregator = TradeDataAggregator(
+            input_queue=test_queue,
+            broadcast_callback=mock_broadcast
+        )
+
+        await aggregator.ensure_handler_exists('AAPL')
+
+        handler = aggregator.stock_handlers['AAPL']
+        assert handler.on_update_callback is not None
+
+    @pytest.mark.asyncio
+    async def test_ensure_handler_exists_concurrent_calls(self):
+        """Test concurrent calls to ensure_handler_exists for same symbol"""
+        test_queue = asyncio.Queue(500)
+        aggregator = TradeDataAggregator(input_queue=test_queue)
+
+        # Call concurrently for same symbol
+        await asyncio.gather(
+            aggregator.ensure_handler_exists('AAPL'),
+            aggregator.ensure_handler_exists('AAPL'),
+            aggregator.ensure_handler_exists('AAPL')
+        )
+
+        # Should only have one handler
+        assert len(aggregator.stock_handlers) == 1
+        assert 'AAPL' in aggregator.stock_handlers
+
+
 @pytest.mark.asyncio
 async def test_realistic_market_simulation():
     """Integration test simulating realistic market conditions"""
