@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import './App.css'
 import StockChart from './components/StockChart'
+import LightweightStockChart from './components/LightweightStockChart'
 
 interface StockData {
   symbol: string
@@ -167,11 +168,21 @@ function App() {
           </div>
         </div>
 
-        {/* ECharts Stock Visualization */}
+        {/* ECharts Stock Visualization - FOR DEBUGGING */}
         {stockData && stockData.candles && Object.keys(stockData.candles).length > 0 && (
           <div className="card" style={{ textAlign: 'left' }}>
-            <h2>Live Stock Chart</h2>
+            <h2>Live Stock Chart (ECharts - Working)</h2>
             <StockChart
+              symbol={stockData.symbol}
+              candles={stockData.candles}
+            />
+          </div>
+        )}
+
+        {/* TradingView Lightweight Charts */}
+        {stockData && stockData.candles && Object.keys(stockData.candles).length > 0 && (
+          <div className="card" style={{ textAlign: 'left' }}>
+            <LightweightStockChart
               symbol={stockData.symbol}
               candles={stockData.candles}
             />

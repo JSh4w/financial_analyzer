@@ -1,20 +1,21 @@
 """DuckDB manager for stock market data storage and retrieval"""
-import time
 from pathlib import Path
 from typing import Dict, Any, List, Tuple
 import logging
-import duckdb
+from database.connection import DuckDBConnection
+
 
 logger = logging.getLogger(__name__)
 
-class DuckDBManager:
-    def __init__(self, db_path="data/stock_data.duckdb"):
-        # Create data directory if it doesn't exist
-        Path(db_path).parent.mkdir(parents=True, exist_ok=True)
-        self.db_path = db_path
-        self.conn = duckdb.connect(db_path)
+class StockDataManager:
+    def __init__(self, db_connection):
+        """
+        Args:
+            db_connection: DuckDBConnection instance
+        """
+        self.db_connection = db_connection or DuckDBConnection
+        self.conn = self.db_connection.get_connection()
         self._create_tables()
-        logger.info(f"DuckDB connected: {db_path}")
 
     def _create_tables(self):
         """Create database tables with proper schema"""
@@ -32,8 +33,6 @@ class DuckDBManager:
                 PRIMARY KEY (symbol, minute_timestamp)
             )
         """)
-
-        # Create index for fast timestamp ordering
         self.conn.execute("""
             CREATE INDEX IF NOT EXISTS idx_symbol_time
             ON ohlcv_1m (symbol, minute_timestamp DESC)
@@ -61,8 +60,7 @@ class DuckDBManager:
                 (symbol, minute_timestamp, open, high, low, close, volume)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
             """, [
-                symbol,
-                minute_timestamp,
+                symbol, minute_timestamp,
                 candle_data['open'],
                 candle_data['high'],
                 candle_data['low'],
@@ -78,7 +76,6 @@ class DuckDBManager:
             return
 
         try:
-            # Prepare data for bulk insert
             data = [
                 (symbol, timestamp, candle['open'], candle['high'],
                  candle['low'], candle['close'], candle['volume'])
@@ -210,6 +207,38 @@ class DuckDBManager:
         except Exception as e:
             logger.error(f"Failed to cleanup old data: {e}")
             return None
+
+    def get_candles_by_time_range(self, symbol: str, from_timestamp: str, to_timestamp: str) -> Dict[str, Dict[str, Any]]:
+        """Get candles within a specific time range (for TradingView historical data)
+
+        Args:
+            symbol: Stock symbol
+            from_timestamp: Start time in RFC-3339 format (e.g., "2021-02-22T15:51:44Z")
+            to_timestamp: End time in RFC-3339 format
+
+        Returns:
+            Dictionary of timestamp -> OHLCV data, sorted ascending by time
+        """
+        try:
+            result = self.conn.execute("""
+                SELECT minute_timestamp, open, high, low, close, volume
+                FROM ohlcv_1m
+                WHERE symbol = ?
+                AND minute_timestamp >= ?
+                AND minute_timestamp <= ?
+                ORDER BY minute_timestamp ASC
+            """, [symbol, from_timestamp, to_timestamp]).fetchall()
+
+            return {
+                row[0]: {
+                    'open': row[1], 'high': row[2], 'low': row[3],
+                    'close': row[4], 'volume': row[5]
+                }
+                for row in result
+            }
+        except Exception as e:
+            logger.error(f"Failed to get candles by time range for {symbol}: {e}")
+            return {}
 
     def close(self):
         """Close database connection"""

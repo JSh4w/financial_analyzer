@@ -76,7 +76,11 @@ const StockChart: React.FC<StockChartProps> = ({ symbol, candles }) => {
         backgroundColor: 'rgba(0, 0, 0, 0.8)',
         borderColor: '#777',
         formatter: function (params: any) {
+          if (!params || params.length === 0) return '';
+
           const data = params[0]
+          if (!data || !data.data) return '';
+
           const volumeData = params[1]
           const candleData = data.data
 
@@ -86,19 +90,19 @@ const StockChart: React.FC<StockChartProps> = ({ symbol, candles }) => {
                 ${symbol} - ${data.axisValue}
               </div>
               <div style="margin-bottom: 4px;">
-                <span style="color: #4CAF50;">Open:</span> $${candleData[0].toFixed(2)}
+                <span style="color: #4CAF50;">Open:</span> $${candleData[0]?.toFixed(2) || 'N/A'}
               </div>
               <div style="margin-bottom: 4px;">
-                <span style="color: #4CAF50;">High:</span> $${candleData[3].toFixed(2)}
+                <span style="color: #4CAF50;">High:</span> $${candleData[3]?.toFixed(2) || 'N/A'}
               </div>
               <div style="margin-bottom: 4px;">
-                <span style="color: #f44336;">Low:</span> $${candleData[2].toFixed(2)}
+                <span style="color: #f44336;">Low:</span> $${candleData[2]?.toFixed(2) || 'N/A'}
               </div>
               <div style="margin-bottom: 4px;">
-                <span style="color: ${candleData[1] >= candleData[0] ? '#4CAF50' : '#f44336'};">Close:</span> $${candleData[1].toFixed(2)}
+                <span style="color: ${candleData[1] >= candleData[0] ? '#4CAF50' : '#f44336'};">Close:</span> $${candleData[1]?.toFixed(2) || 'N/A'}
               </div>
               <div style="margin-bottom: 4px;">
-                <span style="color: #ff9800;">Volume:</span> ${volumeData ? volumeData.data.toLocaleString() : 'N/A'}
+                <span style="color: #ff9800;">Volume:</span> ${volumeData?.data?.toLocaleString() || 'N/A'}
               </div>
             </div>
           `

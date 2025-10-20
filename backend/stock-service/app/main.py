@@ -18,6 +18,7 @@ from app.stocks.websocket_manager import WebSocketManager
 from app.stocks.data_aggregator import TradeDataAggregator
 from app.stocks.historical_data import AlpacaHistoricalData
 from app.stocks.subscription_manager import SubscriptionManager
+from app.stocks.news_websocket import NewsWebsocket
 from app.database.duckdb_manager import DuckDBManager
 from core.logging import setup_logging
 
@@ -35,7 +36,7 @@ GLOBAL_DATA_AGGREGATOR = None
 GLOBAL_DB_MANAGER = None
 GLOBAL_SUBSCRIPTION_MANAGER = None
 GLOBAL_DEMO_SUBSCRIPTION_MANAGER = None
-
+GLOBAL_NEWS_WS = None
 
 # SSE connection management
 active_sse_connections: Dict[str, List[asyncio.Queue]] = {}
@@ -99,9 +100,9 @@ def broadcast_update(update_data: dict):
     else:
         logger.debug(f"No SSE connections for symbol {symbol}")
 
-async def connect_to_websocket_manager(uri = None,output_queue=None):
+async def connect_to_websocket(websocket = WebSocketManager, uri = None,output_queue=None):
     """Connect to the WebSocketManager and return it started"""
-    ws_manager = WebSocketManager(uri = uri, output_queue=output_queue)
+    ws_manager = websocket(uri = uri, output_queue=output_queue)
     try:
         await ws_manager.start()
         print("websocket manager started")
@@ -114,8 +115,10 @@ async def connect_to_websocket_manager(uri = None,output_queue=None):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """FastAPI lifespan manager - startup and shutdown events"""
-    global GLOBAL_WS_MANAGER, GLOBAL_DATA_AGGREGATOR, GLOBAL_DB_MANAGER, GLOBAL_DEMO_WS_MANAGER, GLOBAL_SUBSCRIPTION_MANAGER, GLOBAL_DEMO_SUBSCRIPTION_MANAGER
-
+    # global websockets
+    global GLOBAL_WS_MANAGER, GLOBAL_NEWS_WS, GLOBAL_DEMO_WS_MANAGER
+    # global handlers
+    global GLOBAL_DATA_AGGREGATOR, GLOBAL_DB_MANAGER, GLOBAL_SUBSCRIPTION_MANAGER, GLOBAL_DEMO_SUBSCRIPTION_MANAGER
     # STARTUP: Initialize components when app starts
     logger.info("Starting application components...")
 
@@ -145,8 +148,8 @@ async def lifespan(app: FastAPI):
     # Initialize WebSocket manager with the shared queue
     # "wss://stream.data.alpaca.markets/v2/test for FAKEPACA
     # "wss://stream.data.alpaca.markets/v2/iex"
-    GLOBAL_WS_MANAGER = await connect_to_websocket_manager(uri="wss://stream.data.alpaca.markets/v2/iex", output_queue=shared_queue)
-    GLOBAL_DEMO_WS_MANAGER = await connect_to_websocket_manager(uri="wss://stream.data.alpaca.markets/v2/test", output_queue=shared_queue)
+    GLOBAL_WS_MANAGER = await connect_to_websocket(websocket = WebSocketManager, uri="wss://stream.data.alpaca.markets/v2/iex", output_queue=shared_queue)
+    GLOBAL_DEMO_WS_MANAGER = await connect_to_websocket(websocket = WebSocketManager, uri="wss://stream.data.alpaca.markets/v2/test", output_queue=shared_queue)
 
     # Initialize SubscriptionManager (source of truth for subscriptions)
     GLOBAL_SUBSCRIPTION_MANAGER = SubscriptionManager(
@@ -162,6 +165,12 @@ async def lifespan(app: FastAPI):
     )
 
     logger.info("SubscriptionManager initialized and wired")
+
+
+    # Handle news after
+    GLOBAL_NEWS_WS = await connect_to_websocket(websocket = NewsWebsocket, uri = "wss://stream.data.alpaca.markets/v1beta1/news")
+
+
     yield  # App runs here
 
     # SHUTDOWN: Clean up when app stops
@@ -181,6 +190,10 @@ async def lifespan(app: FastAPI):
     if GLOBAL_DB_MANAGER:
         GLOBAL_DB_MANAGER.close()
         GLOBAL_DB_MANAGER = None
+    
+    if GLOBAL_NEWS_WS:
+        await GLOBAL_NEWS_WS.stop()
+        GLOBAL_NEWS_WS = None
 
 app = FastAPI(
     title="Stock Market Data Service",
@@ -435,6 +448,108 @@ async def get_candle_count(symbol: str):
         return {"symbol": symbol.upper(), "candle_count": count}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}") from e
+
+# TradingView Datafeed API Endpoints
+@app.get("/api/tradingview/config")
+async def tradingview_config():
+    """TradingView UDF configuration endpoint"""
+    return {
+        "supports_search": False,
+        "supports_group_request": False,
+        "supports_marks": False,
+        "supports_timescale_marks": False,
+        "supports_time": True,
+        "supported_resolutions": ["1"]  # Only 1-minute bars for now
+    }
+
+@app.get("/api/tradingview/symbol_info")
+async def tradingview_symbol_info(symbol: str):
+    """Resolve symbol information for TradingView"""
+    return {
+        "name": symbol.upper(),
+        "ticker": symbol.upper(),
+        "description": f"{symbol.upper()} Stock",
+        "type": "stock",
+        "session": "0930-1600",
+        "exchange": "US",
+        "listed_exchange": "US",
+        "timezone": "America/New_York",
+        "minmov": 1,
+        "pricescale": 100,
+        "has_intraday": True,
+        "supported_resolutions": ["1"],
+        "volume_precision": 0,
+        "data_status": "streaming",
+    }
+
+@app.get("/api/tradingview/history")
+async def tradingview_history(
+    symbol: str,
+    from_ts: int,
+    to_ts: int,
+    resolution: str = "1"  # noqa: ARG001 - Reserved for future multi-resolution support
+):
+    """Get historical bars for TradingView
+
+    Args:
+        symbol: Stock symbol
+        from_ts: Unix timestamp (seconds) - start time
+        to_ts: Unix timestamp (seconds) - end time
+        resolution: Bar resolution (only "1" minute supported now)
+
+    Returns:
+        TradingView UDF format: {s: "ok", t: [...], o: [...], h: [...], l: [...], c: [...], v: [...]}
+    """
+    global GLOBAL_DB_MANAGER
+
+    if GLOBAL_DB_MANAGER is None:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    try:
+        # Convert Unix timestamps to RFC-3339 format
+        from datetime import datetime, timezone
+        from_dt = datetime.fromtimestamp(from_ts, tz=timezone.utc)
+        to_dt = datetime.fromtimestamp(to_ts, tz=timezone.utc)
+
+        from_timestamp = from_dt.isoformat().replace('+00:00', 'Z')
+        to_timestamp = to_dt.isoformat().replace('+00:00', 'Z')
+
+        # Query database
+        candles = GLOBAL_DB_MANAGER.get_candles_by_time_range(
+            symbol.upper(),
+            from_timestamp,
+            to_timestamp
+        )
+
+        if not candles:
+            return {"s": "no_data", "nextTime": None}
+
+        # Transform to TradingView format
+        tv_bars = {
+            "s": "ok",
+            "t": [],  # timestamps (unix seconds)
+            "o": [],  # open
+            "h": [],  # high
+            "l": [],  # low
+            "c": [],  # close
+            "v": []   # volume
+        }
+
+        for timestamp, candle in sorted(candles.items()):
+            dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+            tv_bars["t"].append(int(dt.timestamp()))
+            tv_bars["o"].append(candle["open"])
+            tv_bars["h"].append(candle["high"])
+            tv_bars["l"].append(candle["low"])
+            tv_bars["c"].append(candle["close"])
+            tv_bars["v"].append(candle["volume"])
+
+        logger.info(f"Returned {len(tv_bars['t'])} bars for {symbol} from {from_timestamp} to {to_timestamp}")
+        return tv_bars
+
+    except Exception as e:
+        logger.error(f"TradingView history error for {symbol}: {e}")
+        raise HTTPException(status_code=500, detail=f"Error fetching history: {str(e)}") from e
 
 if __name__ == "__main__":
     import uvicorn

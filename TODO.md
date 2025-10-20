@@ -7,6 +7,7 @@
  - login using fixed username and password
  - authentication and user setup 
  - storage of subscribed symbols
+ - Use advanced charts from TradingView
 2. Setup buttons on frontend to view historical stock data - store 50 in database optionally
 3. Auth/ whitelist to login for stock viewing
 4. XGBoost for analysis

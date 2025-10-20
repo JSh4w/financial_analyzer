@@ -1,0 +1,218 @@
+import { useEffect, useRef } from 'react';
+import { createChart, CandlestickSeries, HistogramSeries, type IChartApi, type CandlestickData } from 'lightweight-charts';
+
+interface CandleData {
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+interface LightweightStockChartProps {
+  symbol: string;
+  candles: { [timestamp: string]: CandleData };
+}
+
+/**
+ * TradingView Lightweight Charts component
+ * Uses your existing SSE data stream for real-time updates
+ */
+const LightweightStockChart: React.FC<LightweightStockChartProps> = ({ symbol, candles }) => {
+  const chartContainerRef = useRef<HTMLDivElement>(null);
+  const chartRef = useRef<IChartApi | null>(null);
+  const candlestickSeriesRef = useRef<any>(null);
+  const volumeSeriesRef = useRef<any>(null);
+
+  // Initialize chart
+  useEffect(() => {
+    if (!chartContainerRef.current) {
+      console.log('[LightweightChart] No container ref');
+      return;
+    }
+
+    console.log('[LightweightChart] Initializing chart...');
+
+    try {
+      // Create chart
+      const chart = createChart(chartContainerRef.current, {
+      width: chartContainerRef.current.clientWidth,
+      height: 600,
+      layout: {
+        background: { color: '#1a1a1a' },
+        textColor: '#d1d4dc',
+      },
+      grid: {
+        vertLines: { color: '#2B2B43' },
+        horzLines: { color: '#2B2B43' },
+      },
+      crosshair: {
+        mode: 1, // Normal crosshair
+      },
+      rightPriceScale: {
+        borderColor: '#2B2B43',
+      },
+      timeScale: {
+        borderColor: '#2B2B43',
+        timeVisible: true,
+        secondsVisible: false,
+      },
+    });
+
+    chartRef.current = chart;
+
+    // Add candlestick series (Lightweight Charts v5 - use imported series class)
+    const candlestickSeries = chart.addSeries(CandlestickSeries, {
+      upColor: '#4CAF50',
+      downColor: '#f44336',
+      borderUpColor: '#4CAF50',
+      borderDownColor: '#f44336',
+      wickUpColor: '#4CAF50',
+      wickDownColor: '#f44336',
+    });
+
+    candlestickSeriesRef.current = candlestickSeries;
+
+    // Add volume series (Lightweight Charts v5 - use imported series class)
+    const volumeSeries = chart.addSeries(HistogramSeries, {
+      color: '#26a69a',
+      priceFormat: {
+        type: 'volume',
+      },
+      priceScaleId: '', // empty string for right scale
+    });
+
+    volumeSeries.priceScale().applyOptions({
+      scaleMargins: {
+        top: 0.8, // highest point of the series will be 80% away from the top
+        bottom: 0,
+      },
+    });
+
+    volumeSeriesRef.current = volumeSeries;
+
+    console.log('[LightweightChart] Chart initialized successfully');
+
+    // Handle resize
+    const handleResize = () => {
+      if (chartContainerRef.current && chartRef.current) {
+        chartRef.current.applyOptions({
+          width: chartContainerRef.current.clientWidth,
+        });
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+
+      // Cleanup
+      return () => {
+        window.removeEventListener('resize', handleResize);
+        if (chartRef.current) {
+          chartRef.current.remove();
+          chartRef.current = null;
+        }
+      };
+    } catch (error) {
+      console.error('Error initializing Lightweight Charts:', error);
+      // Chart creation failed, but don't crash the app
+      return () => {};
+    }
+  }, []);
+
+  // Update chart data when candles change
+  useEffect(() => {
+    if (!candlestickSeriesRef.current || !volumeSeriesRef.current || !candles) {
+      console.log('[LightweightChart] Missing dependencies:', {
+        hasCandlestickSeries: !!candlestickSeriesRef.current,
+        hasVolumeSeries: !!volumeSeriesRef.current,
+        hasCandles: !!candles,
+        candleCount: candles ? Object.keys(candles).length : 0
+      });
+      return;
+    }
+
+    console.log('[LightweightChart] Updating chart data...', Object.keys(candles).length, 'candles');
+
+    try {
+      // Convert your candle data to Lightweight Charts format
+      const sortedEntries = Object.entries(candles).sort(([a], [b]) => a.localeCompare(b));
+
+    const candlestickData: CandlestickData[] = sortedEntries.map(([timestamp, candle]) => {
+      const date = new Date(timestamp);
+      // Convert to Unix timestamp in seconds
+      const time = Math.floor(date.getTime() / 1000);
+
+      return {
+        time,
+        open: candle.open,
+        high: candle.high,
+        low: candle.low,
+        close: candle.close,
+      };
+    });
+
+    const volumeData = sortedEntries.map(([timestamp, candle]) => {
+      const date = new Date(timestamp);
+      const time = Math.floor(date.getTime() / 1000);
+
+      // Color volume bars based on price movement
+      const isGreen = candle.close >= candle.open;
+      const color = isGreen ? 'rgba(76, 175, 80, 0.5)' : 'rgba(244, 67, 54, 0.5)';
+
+      return {
+        time,
+        value: candle.volume,
+        color,
+      };
+    });
+
+    // Update series data
+    candlestickSeriesRef.current.setData(candlestickData);
+    volumeSeriesRef.current.setData(volumeData);
+
+      console.log('[LightweightChart] Data updated successfully. First bar:', candlestickData[0]);
+
+      // Fit content to view
+      if (chartRef.current) {
+        chartRef.current.timeScale().fitContent();
+      }
+    } catch (error) {
+      console.error('[LightweightChart] Error updating chart data:', error);
+      // Don't crash the app if chart update fails
+    }
+  }, [candles]);
+
+  return (
+    <div>
+      <div
+        style={{
+          marginBottom: '10px',
+          padding: '10px',
+          backgroundColor: '#1a1a1a',
+          borderRadius: '8px 8px 0 0',
+          border: '1px solid #444',
+          borderBottom: 'none',
+        }}
+      >
+        <h3 style={{ margin: 0, color: '#61dafb' }}>
+          {symbol} - TradingView Lightweight Charts
+        </h3>
+        <p style={{ margin: '5px 0 0 0', fontSize: '0.9em', color: '#888' }}>
+          Live data from Alpaca via SSE • {candles ? Object.keys(candles).length : 0} candles loaded
+        </p>
+      </div>
+      <div
+        ref={chartContainerRef}
+        style={{
+          width: '100%',
+          height: '600px',
+          border: '1px solid #444',
+          borderRadius: '0 0 8px 8px',
+          backgroundColor: '#1a1a1a',
+        }}
+      />
+    </div>
+  );
+};
+
+export default LightweightStockChart;

@@ -13,6 +13,7 @@
     "@sentry/react": "^10.18.0",
     "@types/echarts": "^4.9.22",
     "echarts": "^6.0.0",
+    "lightweight-charts": "^5.0.9",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },

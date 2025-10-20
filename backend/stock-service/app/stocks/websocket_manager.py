@@ -129,8 +129,18 @@ class WebSocketManager:
             self.state = ConnectionState.CONNECTING
 
         try:
+            self._websocket = await websockets.connect(self._uri, additional_headers=self._headers)
+
+            # Alpaca sends two messages on connect:
+            # 1. Welcome message
+            connect_response = await asyncio.wait_for(self._websocket.recv(), timeout=10)
+            logger.info(f"Connect response: {json.loads(connect_response)}")
+
+            # 2. Authentication response
+            auth_response = await asyncio.wait_for(self._websocket.recv(), timeout=10)
+            logger.info(f"Auth response: {json.loads(auth_response)}")
+
             async with self._state_lock:
-                self._websocket = await websockets.connect(self._uri, additional_headers=self._headers)
                 self.state = ConnectionState.CONNECTED
             logger.info("Connected to Alpaca WebSocket")
 
@@ -319,7 +329,6 @@ class WebSocketManager:
         """Reconnect if connection is broken with exponential backoff"""
 
         self._consecutive_failures += 1
-
         # Cap consecutive failures to prevent overflow
         self._consecutive_failures = min(self._consecutive_failures, 20)
 
@@ -340,6 +349,7 @@ class WebSocketManager:
             if await self.connect():
                 logger.info("Reconnection successful after %s attempts", attempt)
                 self._consecutive_failures = 0  # Reset on success
+                self._last_connected = time.time()
                 return True
 
         logger.error("All reconnection attempts failed (consecutive failures: %s)", self._consecutive_failures)
@@ -388,7 +398,11 @@ class WebSocketManager:
         while True:
             try:
                 connection_start = asyncio.get_event_loop().time()
-                await self.connect()
+
+                connected = await self.connect()
+                if not connected:
+                    logger.info("Could not connect, attempting reconnect")
+                    await self._auto_reconnect()
 
                 message_count = 0
                 async for message in self._websocket:
@@ -416,16 +430,26 @@ class WebSocketManager:
                     # Likely market is closed or no subscriptions
                     logger.warning(
                         "Connection closed quickly (%.1fs, %d messages). "
-                        "Market may be closed or no active subscriptions.",
+                        "Market may be closed or no active subscriptions. "
+                        "Will retry with backoff.",
                         connection_duration, message_count
                     )
+                    # Treat quick disconnects as failures to trigger backoff
+                    if not await self._auto_reconnect():
+                        logger.error("Reconnection failed, stopping listener")
+                        break
                 else:
-                    # Normal disconnection after activity
-                    logger.info("Connection closed after %.1fs and %d messages",
+                    # Normal disconnection after activity - reconnect immediately
+                    logger.info("Connection closed after %.1fs and %d messages, reconnecting...",
                                connection_duration, message_count)
+                    async with self._state_lock:
+                        self.state = ConnectionState.DISCONNECTED
 
-            except (websockets.exceptions.ConnectionClosed,
-                    websockets.exceptions.InvalidURI,
+            except websockets.exceptions.ConnectionClosed:
+                
+                logger.warning("Connection closed by API")
+
+            except(websockets.exceptions.InvalidURI,
                     websockets.exceptions.WebSocketException,
                     asyncio.TimeoutError) as e:
                 logger.warning("Connection issue (%s), attempting reconnect...", type(e).__name__)
