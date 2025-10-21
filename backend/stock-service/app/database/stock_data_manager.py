@@ -2,7 +2,7 @@
 from pathlib import Path
 from typing import Dict, Any, List, Tuple
 import logging
-from database.connection import DuckDBConnection
+from app.database.connection import DuckDBConnection
 
 
 logger = logging.getLogger(__name__)

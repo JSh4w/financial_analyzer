@@ -1,4 +1,4 @@
-"""Tests for DuckDB Manager - database operations for stock market data"""
+"""Tests for Stock Data Manager - database operations for stock market data"""
 import os
 import shutil
 import tempfile
@@ -6,28 +6,12 @@ from unittest.mock import patch, Mock
 
 import pytest
 
-from app.database.duckdb_manager import DuckDBManager
+from app.database.stock_data_manager import StockDataManager
+from app.database.connection import DuckDBConnection
 
 
-class TestDuckDBManager:
-    """Test suite for DuckDBManager database operations"""
-
-    @pytest.fixture
-    def temp_db_path(self):
-        """Create temporary database path for testing"""
-        temp_dir = tempfile.mkdtemp()
-        db_path = os.path.join(temp_dir, "test_stock_data.duckdb")
-        yield db_path
-        # Cleanup
-        if os.path.exists(temp_dir):
-            shutil.rmtree(temp_dir)
-
-    @pytest.fixture
-    def db_manager(self, temp_db_path):
-        """Create DuckDBManager instance for testing"""
-        manager = DuckDBManager(db_path=temp_db_path)
-        yield manager
-        manager.close()
+class TestStockDataManager:
+    """Test suite for StockDataManager database operations"""
 
     @pytest.fixture
     def sample_candle_data(self):
@@ -55,22 +39,18 @@ class TestDuckDBManager:
             }
         }
 
-    def test_manager_initialization(self, temp_db_path):
-        """Test DuckDBManager initializes correctly"""
-        manager = DuckDBManager(db_path=temp_db_path)
-
-        assert manager.db_path == temp_db_path
-        assert manager.conn is not None
+    def test_manager_initialization(self, db_manager, temp_db_path):
+        """Test StockDataManager initializes correctly"""
+        assert db_manager.conn is not None
         assert os.path.exists(temp_db_path)
-
-        manager.close()
 
     def test_database_directory_creation(self):
         """Test that database directory is created if it doesn't exist"""
         temp_dir = tempfile.mkdtemp()
         nested_path = os.path.join(temp_dir, "nested", "dir", "test.duckdb")
 
-        manager = DuckDBManager(db_path=nested_path)
+        db_connection = DuckDBConnection(db_path=nested_path)
+        manager = StockDataManager(db_connection=db_connection)
 
         assert os.path.exists(os.path.dirname(nested_path))
         assert os.path.exists(nested_path)
@@ -373,7 +353,8 @@ class TestDuckDBManager:
 
     def test_close_connection(self, temp_db_path):
         """Test closing database connection"""
-        manager = DuckDBManager(db_path=temp_db_path)
+        db_connection = DuckDBConnection(db_path=temp_db_path)
+        manager = StockDataManager(db_connection=db_connection)
         assert manager.conn is not None
 
         manager.close()
@@ -382,7 +363,7 @@ class TestDuckDBManager:
         with pytest.raises(Exception):
             manager.conn.execute("SELECT 1")
 
-    @patch('app.database.duckdb_manager.logger')
+    @patch('app.database.stock_data_manager.logger')
     def test_logging_on_error(self, mock_logger, db_manager):
         # Mock the entire connection instead of just execute method
         mock_conn = Mock()

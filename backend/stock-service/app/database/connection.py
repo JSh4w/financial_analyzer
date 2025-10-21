@@ -11,7 +11,6 @@ class DuckDBConnection:
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
         self.db_path = db_path
         self.conn = duckdb.connect(db_path)
-        self.conn.execute("PRAGMA journal_mode=WAL")
         logger.info("DuckDB connected: %s",db_path)
     
     def get_connection(self):

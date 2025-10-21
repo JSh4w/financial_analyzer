@@ -19,7 +19,8 @@ from app.stocks.data_aggregator import TradeDataAggregator
 from app.stocks.historical_data import AlpacaHistoricalData
 from app.stocks.subscription_manager import SubscriptionManager
 from app.stocks.news_websocket import NewsWebsocket
-from app.database.duckdb_manager import DuckDBManager
+from app.database.stock_data_manager import StockDataManager
+from app.database.connection import DuckDBConnection
 from core.logging import setup_logging
 
 
@@ -123,7 +124,8 @@ async def lifespan(app: FastAPI):
     logger.info("Starting application components...")
 
     # Initialize database manager
-    GLOBAL_DB_MANAGER = DuckDBManager("data/stock_data.duckdb")
+    db_connection = DuckDBConnection("data/stock_data.duckdb")
+    GLOBAL_DB_MANAGER = StockDataManager(db_connection=db_connection)
 
     # Websocket queue, max number of stocks
     shared_queue = asyncio.Queue(500)

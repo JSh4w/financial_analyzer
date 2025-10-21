@@ -1,4 +1,6 @@
 """Database package for stock market data storage"""
-from .duckdb_manager import DuckDBManager
+from .stock_data_manager import StockDataManager
+from .news_data_manager import NewsDataManager
+from .connection import DuckDBConnection
 
-__all__ = ['DuckDBManager']
+__all__ = ['StockDataManager', 'NewsDataManager', 'DuckDBConnection']
