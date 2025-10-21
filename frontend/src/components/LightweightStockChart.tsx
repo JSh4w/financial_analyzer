@@ -166,16 +166,14 @@ const LightweightStockChart: React.FC<LightweightStockChartProps> = ({ symbol, c
       };
     });
 
-    // Update series data
+    // Update series data - setData preserves the zoom/pan state
     candlestickSeriesRef.current.setData(candlestickData);
     volumeSeriesRef.current.setData(volumeData);
 
       console.log('[LightweightChart] Data updated successfully. First bar:', candlestickData[0]);
 
-      // Fit content to view
-      if (chartRef.current) {
-        chartRef.current.timeScale().fitContent();
-      }
+      // Only fit content on initial load (when series has no data)
+      // Don't call fitContent() on updates to preserve user's zoom/pan
     } catch (error) {
       console.error('[LightweightChart] Error updating chart data:', error);
       // Don't crash the app if chart update fails

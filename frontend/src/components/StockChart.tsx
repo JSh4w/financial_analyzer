@@ -59,6 +59,12 @@ const StockChart: React.FC<StockChartProps> = ({ symbol, candles }) => {
 
     const volumeData = sortedEntries.map(([, candle]) => candle.volume)
 
+    // Get current dataZoom state to preserve user's zoom/pan position
+    const currentOption = chartInstance.current.getOption() as any
+    const currentDataZoom = currentOption?.dataZoom?.[0]
+    const preservedStart = currentDataZoom?.start
+    const preservedEnd = currentDataZoom?.end
+
     const option = {
       title: {
         text: `${symbol} - Live Stock Data`,
@@ -165,8 +171,9 @@ const StockChart: React.FC<StockChartProps> = ({ symbol, candles }) => {
         {
           type: 'inside',
           xAxisIndex: [0, 1],
-          start: dates.length > 20 ? ((dates.length - 20) / dates.length) * 100 : 0,
-          end: 100
+          // Use preserved zoom state if available, otherwise default to last 20 candles
+          start: preservedStart !== undefined ? preservedStart : (dates.length > 20 ? ((dates.length - 20) / dates.length) * 100 : 0),
+          end: preservedEnd !== undefined ? preservedEnd : 100
         },
         {
           show: true,
@@ -174,8 +181,8 @@ const StockChart: React.FC<StockChartProps> = ({ symbol, candles }) => {
           type: 'slider',
           bottom: '1%',
           height: 25,
-          start: dates.length > 20 ? ((dates.length - 20) / dates.length) * 100 : 0,
-          end: 100,
+          start: preservedStart !== undefined ? preservedStart : (dates.length > 20 ? ((dates.length - 20) / dates.length) * 100 : 0),
+          end: preservedEnd !== undefined ? preservedEnd : 100,
           textStyle: { color: '#ffffff' },
           handleStyle: {
             color: '#61dafb'
