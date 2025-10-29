@@ -1,8 +1,6 @@
 """Main backend application using FastAPI for stock analysis"""
 import json
 import asyncio
-import time
-import functools
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from logging import getLogger
@@ -18,8 +16,11 @@ from app.stocks.websocket_manager import WebSocketManager
 from app.stocks.data_aggregator import TradeDataAggregator
 from app.stocks.historical_data import AlpacaHistoricalData
 from app.stocks.subscription_manager import SubscriptionManager
-from app.stocks.news_websocket import NewsWebsocket
 from app.database.stock_data_manager import StockDataManager
+
+from app.stocks.news_websocket import NewsWebsocket
+from app.database.news_data_manager import NewsDataManager
+
 from app.database.connection import DuckDBConnection
 from core.logging import setup_logging
 
@@ -38,6 +39,7 @@ GLOBAL_DB_MANAGER = None
 GLOBAL_SUBSCRIPTION_MANAGER = None
 GLOBAL_DEMO_SUBSCRIPTION_MANAGER = None
 GLOBAL_NEWS_WS = None
+GLOBAL_NESW_DB_MANAGER = None
 
 # SSE connection management
 active_sse_connections: Dict[str, List[asyncio.Queue]] = {}
@@ -117,7 +119,7 @@ async def connect_to_websocket(websocket = WebSocketManager, uri = None,output_q
 async def lifespan(app: FastAPI):
     """FastAPI lifespan manager - startup and shutdown events"""
     # global websockets
-    global GLOBAL_WS_MANAGER, GLOBAL_NEWS_WS, GLOBAL_DEMO_WS_MANAGER
+    global GLOBAL_WS_MANAGER, GLOBAL_NEWS_WS, GLOBAL_DEMO_WS_MANAGER, GLOBAL_NEWS_DB_MANAGER
     # global handlers
     global GLOBAL_DATA_AGGREGATOR, GLOBAL_DB_MANAGER, GLOBAL_SUBSCRIPTION_MANAGER, GLOBAL_DEMO_SUBSCRIPTION_MANAGER
     # STARTUP: Initialize components when app starts
@@ -150,8 +152,16 @@ async def lifespan(app: FastAPI):
     # Initialize WebSocket manager with the shared queue
     # "wss://stream.data.alpaca.markets/v2/test for FAKEPACA
     # "wss://stream.data.alpaca.markets/v2/iex"
-    GLOBAL_WS_MANAGER = await connect_to_websocket(websocket = WebSocketManager, uri="wss://stream.data.alpaca.markets/v2/iex", output_queue=shared_queue)
-    GLOBAL_DEMO_WS_MANAGER = await connect_to_websocket(websocket = WebSocketManager, uri="wss://stream.data.alpaca.markets/v2/test", output_queue=shared_queue)
+    GLOBAL_WS_MANAGER = await connect_to_websocket(
+        websocket = WebSocketManager,
+        uri="wss://stream.data.alpaca.markets/v2/iex",
+        output_queue=shared_queue
+        )
+    GLOBAL_DEMO_WS_MANAGER = await connect_to_websocket(
+        websocket = WebSocketManager,
+        uri="wss://stream.data.alpaca.markets/v2/test",
+        output_queue=shared_queue
+        )
 
     # Initialize SubscriptionManager (source of truth for subscriptions)
     GLOBAL_SUBSCRIPTION_MANAGER = SubscriptionManager(
@@ -170,8 +180,14 @@ async def lifespan(app: FastAPI):
 
 
     # Handle news after
-    GLOBAL_NEWS_WS = await connect_to_websocket(websocket = NewsWebsocket, uri = "wss://stream.data.alpaca.markets/v1beta1/news")
+    news_queue = asyncio.Queue(500)
 
+    GLOBAL_NEWS_DB_MANAGER = NewsDataManager(db_connection=db_connection)
+    GLOBAL_NEWS_WS = await connect_to_websocket(
+        websocket = NewsWebsocket,
+        uri = "wss://stream.data.alpaca.markets/v1beta1/news",
+        output_queue=news_queue
+        )
 
     yield  # App runs here
 
@@ -184,7 +200,7 @@ async def lifespan(app: FastAPI):
     if GLOBAL_WS_MANAGER:
         await GLOBAL_WS_MANAGER.stop()
         GLOBAL_WS_MANAGER = None
-    
+
     if GLOBAL_DEMO_WS_MANAGER:
         await GLOBAL_DEMO_WS_MANAGER.stop()
         GLOBAL_DEMO_WS_MANAGER = None
@@ -192,7 +208,7 @@ async def lifespan(app: FastAPI):
     if GLOBAL_DB_MANAGER:
         GLOBAL_DB_MANAGER.close()
         GLOBAL_DB_MANAGER = None
-    
+
     if GLOBAL_NEWS_WS:
         await GLOBAL_NEWS_WS.stop()
         GLOBAL_NEWS_WS = None
@@ -382,7 +398,7 @@ async def stream_stock_data(symbol: str):
         except Exception as e:
             # Clean up on any error
             await remove_sse_connection(symbol, sse_queue)
-            raise
+            raise e
 
     return StreamingResponse(
         event_stream(),

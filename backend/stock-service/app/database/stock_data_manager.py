@@ -19,7 +19,7 @@ class StockDataManager:
 
     def _create_tables(self):
         """Create database tables with proper schema"""
-        # Main OHLCV table - partitioned by symbol for fast queries
+        # Main OHLCV table - indexed by symbol for fast queries
         self.conn.execute("""
             CREATE TABLE IF NOT EXISTS ohlcv_1m (
                 symbol VARCHAR NOT NULL,
@@ -242,6 +242,5 @@ class StockDataManager:
 
     def close(self):
         """Close database connection"""
-        if self.conn:
-            self.conn.close()
-            logger.info("DuckDB connection closed")
+        if self.db_connection:
+            self.db_connection.close()

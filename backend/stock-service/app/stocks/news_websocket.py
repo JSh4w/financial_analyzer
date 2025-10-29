@@ -1,14 +1,17 @@
-
-import websockets
+"""News based websocket manager"""
 import asyncio
 import json
-from logging import getLogger 
 from app.config import Settings
+from logging import getLogger 
+
+import websockets
+
 
 settings = Settings()
 logger = getLogger(__name__)
 
 class NewsWebsocket:
+    """Basic websocket setup - for single news source"""
     def __init__(self, uri = None, headers = None, output_queue = None):
         self._uri = uri or  "wss://stream.data.alpaca.markets/v1beta1/news"
         self._websocket = None
@@ -18,16 +21,17 @@ class NewsWebsocket:
           }
         self._output_queue = output_queue
         self.connection_task = None
-        self.queueing_task = None 
+        self.queueing_task = None
 
     async def connect(self):
+        """Connect to websocket"""
         try:
             self._websocket = await websockets.connect(self._uri, additional_headers=self._headers)
             connect_response = await asyncio.wait_for(self._websocket.recv(), timeout=10)
-            logger.info(f"Connect response: {json.loads(connect_response)}")
+            logger.info("Connect response: %s",json.loads(connect_response))
             auth_response = await asyncio.wait_for(self._websocket.recv(), timeout=10)
             auth_data = json.loads(auth_response)
-            logger.info(f"Auth response: {auth_data}")
+            logger.info("Auth response: %s", auth_data)
 
             # Check for connection limit error
             if isinstance(auth_data, list):
@@ -46,7 +50,7 @@ class NewsWebsocket:
 
             # Wait for subscription confirmation
             sub_response = await asyncio.wait_for(self._websocket.recv(), timeout=10)
-            logger.info(f"Subscription response: {json.loads(sub_response)}")
+            logger.info("Subscription response %s",json.loads(sub_response))
 
             return True
         except websockets.exceptions.InvalidStatus as e:

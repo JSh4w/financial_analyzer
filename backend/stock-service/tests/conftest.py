@@ -45,6 +45,15 @@ def db_manager(temp_db_path):
     manager.close()
 
 @pytest.fixture
-def client():
-    """Create FastAPI test client"""
-    return TestClient(app)
+def client(db_manager):
+    """Create FastAPI test client with database"""
+    # Import here to avoid circular dependency
+    import app.main as main_module
+
+    # Set the global database manager for the app
+    main_module.GLOBAL_DB_MANAGER = db_manager
+
+    yield TestClient(app)
+
+    # Cleanup
+    main_module.GLOBAL_DB_MANAGER = None
