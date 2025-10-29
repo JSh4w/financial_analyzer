@@ -1,0 +1,8 @@
+{
+  "python.analysis.extraPaths": [
+    "${workspaceFolder}/backend/stock-service"
+  ],
+  "pylint.args": [
+    "--init-hook=import sys; sys.path.append('${workspaceFolder}/backend/stock-service')"
+  ]
+}

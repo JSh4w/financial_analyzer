@@ -46,7 +46,8 @@
 			"ms-vscode.live-server",
 			"ms-python.pylint",
 			"EricSia.pythonsnippets3",
-			"tamasfe.even-better-toml"
+			"tamasfe.even-better-toml",
+			"charliermarsh.ruff"
 		]
 	  }
 	},
