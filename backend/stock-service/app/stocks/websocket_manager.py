@@ -5,7 +5,7 @@ from collections import defaultdict
 import json
 import asyncio
 import logging
-import time
+import copy
 from enum import Enum
 
 import websockets
@@ -138,6 +138,9 @@ class WebSocketManager:
 
         try:
             async with self._state_lock:
+                # Reconnect all symbols
+                symbols_to_reconnect = copy.deepcopy(self.active_subscriptions)
+                
                 self._websocket = await websockets.connect(
                     self._uri, additional_headers=self._headers
                 )
@@ -156,23 +159,21 @@ class WebSocketManager:
                 self.state = ConnectionState.CONNECTED
                 logger.info("Connected to Alpaca WebSocket")
 
-            # Reconnect all symbols
-            symbols_to_reconnect = list[str](self.active_subscriptions.keys())
 
             failed_symbols = []
-            for symbol in symbols_to_reconnect:
-                success = await self._subscribe_symbol(symbol)
-                if not success:
-                    failed_symbols.append(symbol)
+            for symbol in symbols_to_reconnect.keys():
+                async with self._symbol_subscription_locks[symbol]:
+                    if symbol not in self.active_subscriptions:
+                        continue 
+                    for _type in list(symbols_to_reconnect[symbol].keys()):
+                        if _type not in self.active_subscriptions[symbol]:
+                            continue
+                        success = await self._subscribe_symbol(symbol, _type)
+                        if not success:
+                            failed_symbols.append((symbol, type))
             if failed_symbols:
                 logger.warning("Failed to resubsribe to symbols: %s ", failed_symbols)
-            return True
-        except websockets.exceptions.InvalidStatus as e:
-            logger.error("Connection failed, possible due to an invalid key: %s", e)
-            async with self._state_lock:
-                self.state = ConnectionState.DISCONNECTED
-                self._websocket = None
-            return False
+            return True 
         except Exception as e:
             logger.error("Connection failed %s", e)
             async with self._state_lock:
@@ -322,6 +323,8 @@ class WebSocketManager:
                     del self.active_subscriptions[symbol][subscription_type]
                     if len(self.active_subscriptions[symbol]) == 0:
                         del self.active_subscriptions[symbol]
+        else:
+            self.active_subscriptions[symbol][subscription_type].discard(user_id)
 
         return True
 
@@ -357,7 +360,7 @@ class WebSocketManager:
             for symbol, trade_list in self.active_subscriptions.items():
                 for trade_type in trade_list:
                     if user_id in trade_list[trade_type]:
-                        user_stocks.add([symbol,trade_type])
+                        user_stocks.add((symbol,trade_type))
 
             return user_stocks
         else:
