@@ -190,7 +190,7 @@ class WebSocketManager:
                     self.state = ConnectionState.DISCONNECTED
                     self._websocket = None
             except Exception as e:
-                logger.WARNING("Issue when diconnecting Webscocket %s", e)
+                logger.WARNING("Issue when diconnecting Websocket %s", e)
         else:
             logger.info("Not connected")
         logger.info("Disconnected from WebSocket")
@@ -355,7 +355,7 @@ class WebSocketManager:
         """Get the set of current subscriptions"""
         # Not used elsewhere so no locks
         if user_id:
-            user_stocks = set[Any]()
+            user_stocks = set()
             # TODO this is computational super inneficient
             for symbol, trade_list in self.active_subscriptions.items():
                 for trade_type in trade_list:
@@ -444,13 +444,14 @@ class WebSocketManager:
                 message_count = 0
                 for msg in data:
                     if self.output_queue:
+                        message_count += 1
                         await self.output_queue.put(msg)
                 if message_count > 0:
                     logger.debug(f"Queued {message_count} market data messages")
             else:
                 # Single message
                 if self.output_queue:
-                    await self.output_queue.put(msg)
+                    await self.output_queue.put(data)
                 else:
                     logger.info("Control/unknown message: %s", data)
 
