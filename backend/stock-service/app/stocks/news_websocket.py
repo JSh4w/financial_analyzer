@@ -22,6 +22,7 @@ class NewsWebsocket:
         self._output_queue = output_queue
         self.connection_task = None
         self.queueing_task = None
+        
 
     async def connect(self):
         """Connect to websocket"""
@@ -143,3 +144,18 @@ class NewsWebsocket:
         else:
             logger.info("Not connected")
         logger.info("Disconnected from WebSocket")
+
+    @staticmethod
+    def process_news_data(data):
+        """Process news data from Alpaca API"""
+        if not data.get('created_at') or not data.get('headline'):
+            raise ValueError("Missing required news fields")
+        
+        return {
+            'time': data['created_at'],
+            'headline': data['headline'],
+            'summary': data.get('summary', ''),
+            'tickers': data.get('symbols', []),
+            'source': data.get('source', 'Alpaca'),
+            'url': data.get('url', '')
+        }

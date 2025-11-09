@@ -41,8 +41,27 @@ GLOBAL_DEMO_SUBSCRIPTION_MANAGER = None
 GLOBAL_NEWS_WS = None
 GLOBAL_NESW_DB_MANAGER = None
 
+
 # SSE connection management
 active_sse_connections: Dict[str, List[asyncio.Queue]] = {}
+
+# since each person consumes a queue i need one per news queue
+active_news_connections: List[asyncio.Queue] = []
+
+async def broadcast_news(news_queue: asyncio.Queue):
+    while True:
+        item = await news_queue.get()
+        if item is None:
+            break
+        for queue in active_news_connections:
+            queue.put_nowait(item)
+
+def add_news_connection(queue: asyncio.Queue):
+    active_news_connections.append(queue)
+
+def remove_news_connection(queue: asyncio.Queue):
+    active_news_connections.remove(queue)
+
 
 async def add_sse_connection(symbol: str, queue: asyncio.Queue):
     """Add an SSE connection queue for a symbol"""
@@ -103,9 +122,9 @@ def broadcast_update(update_data: dict):
     else:
         logger.debug(f"No SSE connections for symbol {symbol}")
 
-async def connect_to_websocket(websocket = WebSocketManager, uri = None,output_queue=None):
+async def connect_to_websocket(websocket = WebSocketManager, uri = None,output_queue=None, **kwargs):
     """Connect to the WebSocketManager and return it started"""
-    ws_manager = websocket(uri = uri, output_queue=output_queue)
+    ws_manager = websocket(uri = uri, output_queue=output_queue, **kwargs)
     try:
         await ws_manager.start()
         print("websocket manager started")
@@ -188,6 +207,9 @@ async def lifespan(app: FastAPI):
         uri = "wss://stream.data.alpaca.markets/v1beta1/news",
         output_queue=news_queue
         )
+    
+    asyncio.create_task(broadcast_news(news_queue))
+    
 
     yield  # App runs here
 
@@ -568,6 +590,37 @@ async def tradingview_history(
     except Exception as e:
         logger.error(f"TradingView history error for {symbol}: {e}")
         raise HTTPException(status_code=500, detail=f"Error fetching history: {str(e)}") from e
+
+
+@app.get("/news/stream")
+async def stream_news_data():
+    """Stream news data via SSE"""
+    n_queue = asyncio.Queue(maxsize=10)
+    add_news_connection(n_queue)
+    async def event_stream():
+        try:
+            while True:
+                update_data = await n_queue.get()
+                try:
+                    update_data = NewsWebsocket.process_news_data(update_data)
+                    yield f"data: {json.dumps(update_data)}\n\n"
+                except (KeyError, ValueError) as e:
+                    logger.warning("Invalid news data, skipping %s", e)
+                    continue  # Skip this item, keep streaming
+        except asyncio.CancelledError:
+            remove_news_connection(queue=n_queue)
+            await n_queue.put(None)
+        except Exception:
+            remove_news_connection(queue=n_queue)
+           
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+        }
+    )
 
 if __name__ == "__main__":
     import uvicorn

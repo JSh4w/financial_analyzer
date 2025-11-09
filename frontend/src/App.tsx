@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import './App.css'
-import StockChart from './components/StockChart'
 import LightweightStockChart from './components/LightweightStockChart'
+import NewsFeed from './components/NewsFeed'
 
 interface StockData {
   symbol: string
@@ -17,229 +17,344 @@ interface StockData {
   update_timestamp?: string
 }
 
+interface StockSubscription {
+  symbol: string
+  eventSource: EventSource | null
+  stockData: StockData | null
+  status: 'loading' | 'streaming' | 'error'
+  errorMessage?: string
+}
+
 function App() {
-  const [symbol, setSymbol] = useState('FAKEPACA')
-  const [isSubscribed, setIsSubscribed] = useState(false)
-  const [isStreaming, setIsStreaming] = useState(false)
-  const [stockData, setStockData] = useState<StockData | null>(null)
-  const [status, setStatus] = useState('')
-  const eventSourceRef = useRef<EventSource | null>(null)
+  const [searchSymbol, setSearchSymbol] = useState('')
+  const [activeStocks, setActiveStocks] = useState<Map<string, StockSubscription>>(new Map())
+  const [globalStatus, setGlobalStatus] = useState('')
+  const eventSourcesRef = useRef<Map<string, EventSource>>(new Map())
 
   const BACKEND_URL = 'http://localhost:8001'
 
-  const subscribeToStock = async () => {
-    try {
-      setStatus(`Subscribing to ${symbol}...`)
-      const response = await fetch(`${BACKEND_URL}/ws_manager/${symbol}`)
-      const result = await response.json()
+  const addStock = async (symbol: string) => {
+    const upperSymbol = symbol.toUpperCase().trim()
 
-      if (result.status === 'subscribed') {
-        setIsSubscribed(true)
-        setStatus(`✅ ${result.message}`)
-      } else {
-        setStatus(`❌ ${result.message}`)
-      }
-    } catch (error) {
-      setStatus(`❌ Error: ${error}`)
-    }
-  }
-
-  const startStreaming = () => {
-    if (!isSubscribed) {
-      setStatus(`❌ Please subscribe to ${symbol} first`)
+    if (!upperSymbol) {
+      setGlobalStatus('❌ Please enter a stock symbol')
       return
     }
 
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close()
+    if (activeStocks.has(upperSymbol)) {
+      setGlobalStatus(`❌ Already viewing ${upperSymbol}`)
+      return
     }
 
-    setStatus('Starting SSE connection...')
-    const eventSource = new EventSource(`${BACKEND_URL}/stream/${symbol}`)
-    eventSourceRef.current = eventSource
+    // Initialize stock subscription
+    setActiveStocks(prev => new Map(prev).set(upperSymbol, {
+      symbol: upperSymbol,
+      eventSource: null,
+      stockData: null,
+      status: 'loading'
+    }))
 
-    eventSource.onopen = () => {
-      setIsStreaming(true)
-      setStatus(`🔴 Live streaming ${symbol} data`)
-    }
+    setGlobalStatus(`Subscribing to ${upperSymbol}...`)
 
-    eventSource.onmessage = (event) => {
-      try {
-        console.log('SSE data received:', event.data)
-        const data: StockData = JSON.parse(event.data)
-        console.log('Parsed SSE data:', data)
-        setStockData(prev => {
-          // If this is an initial snapshot, replace all data
-          if ((data as any).is_initial) {
-            console.log('Received initial snapshot with', Object.keys(data.candles || {}).length, 'candles')
-            return data
+    try {
+      // Step 1: Subscribe via WebSocket manager
+      const response = await fetch(`${BACKEND_URL}/ws_manager/${upperSymbol}`)
+      const result = await response.json()
+
+      if (result.status !== 'subscribed') {
+        setActiveStocks(prev => {
+          const updated = new Map(prev)
+          const stock = updated.get(upperSymbol)
+          if (stock) {
+            stock.status = 'error'
+            stock.errorMessage = result.message || 'Subscription failed'
           }
-
-          // Otherwise, merge delta updates
-          if (!prev) {
-            return data
-          }
-
-          console.log('Merging delta update with', Object.keys(data.candles || {}).length, 'new candles')
-          // Merge candles data (delta updates) and update timestamp
-          return {
-            ...prev,
-            candles: { ...prev.candles, ...data.candles },
-            update_timestamp: data.update_timestamp || new Date().toISOString()
-          }
+          return updated
         })
-      } catch (error) {
-        console.error('Error parsing SSE data:', error)
+        setGlobalStatus(`❌ Failed to subscribe to ${upperSymbol}`)
+        return
       }
-    }
 
-    eventSource.onerror = (error) => {
-      console.error('SSE Error:', error)
-      setStatus('❌ SSE connection error')
-      setIsStreaming(false)
+      // Step 2: Start SSE streaming
+      const eventSource = new EventSource(`${BACKEND_URL}/stream/${upperSymbol}`)
+      eventSourcesRef.current.set(upperSymbol, eventSource)
+
+      eventSource.onopen = () => {
+        setActiveStocks(prev => {
+          const updated = new Map(prev)
+          const stock = updated.get(upperSymbol)
+          if (stock) {
+            stock.status = 'streaming'
+            stock.eventSource = eventSource
+          }
+          return updated
+        })
+        setGlobalStatus(`✅ Now streaming ${upperSymbol}`)
+      }
+
+      eventSource.onmessage = (event) => {
+        try {
+          const data: StockData = JSON.parse(event.data)
+
+          setActiveStocks(prev => {
+            const updated = new Map(prev)
+            const stock = updated.get(upperSymbol)
+            if (!stock) return prev
+
+            // Handle initial snapshot vs delta updates
+            if ((data as any).is_initial) {
+              stock.stockData = data
+            } else {
+              // Merge delta updates
+              stock.stockData = {
+                ...data,
+                candles: {
+                  ...(stock.stockData?.candles || {}),
+                  ...data.candles
+                },
+                update_timestamp: data.update_timestamp || new Date().toISOString()
+              }
+            }
+            return updated
+          })
+        } catch (error) {
+          console.error(`Error parsing SSE data for ${upperSymbol}:`, error)
+        }
+      }
+
+      eventSource.onerror = (error) => {
+        console.error(`SSE Error for ${upperSymbol}:`, error)
+        setActiveStocks(prev => {
+          const updated = new Map(prev)
+          const stock = updated.get(upperSymbol)
+          if (stock) {
+            stock.status = 'error'
+            stock.errorMessage = 'Stream connection error'
+          }
+          return updated
+        })
+      }
+
+    } catch (error) {
+      setActiveStocks(prev => {
+        const updated = new Map(prev)
+        const stock = updated.get(upperSymbol)
+        if (stock) {
+          stock.status = 'error'
+          stock.errorMessage = String(error)
+        }
+        return updated
+      })
+      setGlobalStatus(`❌ Error: ${error}`)
     }
   }
 
-  const stopStreaming = () => {
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close()
-      eventSourceRef.current = null
+  const removeStock = async (symbol: string) => {
+    const upperSymbol = symbol.toUpperCase()
+
+    // Close EventSource connection
+    const eventSource = eventSourcesRef.current.get(upperSymbol)
+    if (eventSource) {
+      eventSource.close()
+      eventSourcesRef.current.delete(upperSymbol)
     }
-    setIsStreaming(false)
-    setStatus('Stopped streaming')
+
+    // Unsubscribe from backend
+    try {
+      await fetch(`${BACKEND_URL}/ws_manager/close/${upperSymbol}`)
+    } catch (error) {
+      console.error(`Error unsubscribing from ${upperSymbol}:`, error)
+    }
+
+    // Remove from active stocks
+    setActiveStocks(prev => {
+      const updated = new Map(prev)
+      updated.delete(upperSymbol)
+      return updated
+    })
+
+    setGlobalStatus(`Removed ${upperSymbol}`)
+  }
+
+  const handleViewStock = () => {
+    if (searchSymbol.trim()) {
+      addStock(searchSymbol)
+      setSearchSymbol('') // Clear search after adding
+    }
+  }
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleViewStock()
+    }
   }
 
   useEffect(() => {
+    // Cleanup: close all EventSource connections on unmount
     return () => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close()
-      }
+      eventSourcesRef.current.forEach(eventSource => eventSource.close())
+      eventSourcesRef.current.clear()
     }
   }, [])
 
   return (
     <>
       <div>
-        <h1>Stock Market SSE Test</h1>
-        
+        <h1>Multi-Stock Market Dashboard</h1>
+
+        {/* Search and Add Stock */}
         <div className="card" style={{ textAlign: 'left' }}>
-          <h2>Controls</h2>
-          <div style={{ marginBottom: '20px' }}>
+          <h2>Add Stock</h2>
+          <div style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
             <input
               type="text"
-              value={symbol}
-              onChange={(e) => setSymbol(e.target.value.toUpperCase())}
-              placeholder="Enter stock symbol (e.g., AAPL)"
-              disabled={isSubscribed || isStreaming}
+              value={searchSymbol}
+              onChange={(e) => setSearchSymbol(e.target.value.toUpperCase())}
+              onKeyPress={handleKeyPress}
+              placeholder="Enter stock symbol (e.g., AAPL, TSLA, MSFT)"
               style={{
-                padding: '10px',
-                marginRight: '10px',
+                padding: '12px',
                 fontSize: '16px',
-                width: '200px',
+                width: '300px',
                 borderRadius: '4px',
                 border: '1px solid #ccc'
               }}
             />
             <button
-              onClick={subscribeToStock}
-              disabled={isSubscribed || !symbol.trim()}
+              onClick={handleViewStock}
+              disabled={!searchSymbol.trim()}
               style={{
-                marginRight: '10px',
-                backgroundColor: isSubscribed ? '#4CAF50' : '#008CBA',
-                opacity: isSubscribed || !symbol.trim() ? 0.6 : 1
+                padding: '12px 24px',
+                fontSize: '16px',
+                backgroundColor: '#008CBA',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: searchSymbol.trim() ? 'pointer' : 'not-allowed',
+                opacity: searchSymbol.trim() ? 1 : 0.6
               }}
             >
-              {isSubscribed ? `✅ Subscribed to ${symbol}` : `Subscribe to ${symbol}`}
+              View
             </button>
-            
-            {!isStreaming ? (
-              <button onClick={startStreaming}>
-                🔴 Start Streaming
-              </button>
-            ) : (
-              <button onClick={stopStreaming} style={{ backgroundColor: '#f44336' }}>
-                ⏹️ Stop Streaming
-              </button>
-            )}
           </div>
-          
-          <div style={{ marginBottom: '20px' }}>
-            <strong>Status:</strong> <span>{status}</span>
-          </div>
-        </div>
 
-        {/* ECharts Stock Visualization - FOR DEBUGGING */}
-        {stockData && stockData.candles && Object.keys(stockData.candles).length > 0 && (
-          <div className="card" style={{ textAlign: 'left' }}>
-            <h2>Live Stock Chart (ECharts - Working)</h2>
-            <StockChart
-              symbol={stockData.symbol}
-              candles={stockData.candles}
-            />
-          </div>
-        )}
+          {globalStatus && (
+            <div style={{ marginBottom: '20px' }}>
+              <strong>Status:</strong> <span>{globalStatus}</span>
+            </div>
+          )}
 
-        {/* TradingView Lightweight Charts */}
-        {stockData && stockData.candles && Object.keys(stockData.candles).length > 0 && (
-          <div className="card" style={{ textAlign: 'left' }}>
-            <LightweightStockChart
-              symbol={stockData.symbol}
-              candles={stockData.candles}
-            />
-          </div>
-        )}
-
-        <div className="card" style={{ textAlign: 'left' }}>
-          <h2>Raw Data Stream</h2>
-          {!stockData ? (
-            <p>No data received yet...</p>
-          ) : (
-            <div style={{ 
-              border: '1px solid #ddd', 
-              padding: '10px', 
-              backgroundColor: '#2a2a2a',
-              color: '#ffffff',
-              borderRadius: '8px'
-            }}>
-              <div style={{ marginBottom: '8px' }}>
-                <strong style={{ color: '#61dafb' }}>Symbol:</strong> {stockData.symbol}
-              </div>
-              <div style={{ marginBottom: '8px' }}>
-                <strong style={{ color: '#61dafb' }}>Last Updated:</strong> {stockData.update_timestamp || new Date().toISOString()}
-              </div>
-              {stockData.candles && Object.keys(stockData.candles).length > 0 && (
-                <div>
-                  <strong style={{ color: '#61dafb' }}>OHLCV Data ({Object.keys(stockData.candles).length} candles):</strong>
-                  <div style={{ marginLeft: '20px', marginTop: '5px', maxHeight: '300px', overflowY: 'auto' }}>
-                    {Object.entries(stockData.candles)
-                      .sort(([a], [b]) => b.localeCompare(a)) // Sort by timestamp descending (latest first)
-                      .map(([timestamp, candle]) => (
-                        <div key={timestamp} style={{ 
-                          marginBottom: '10px', 
-                          padding: '8px', 
-                          border: '1px solid #444', 
-                          borderRadius: '4px',
-                          backgroundColor: '#333'
-                        }}>
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '0.9em' }}>
-                            <div><strong>Open:</strong> <span style={{ color: '#4CAF50' }}>${candle.open?.toFixed(2)}</span></div>
-                            <div><strong>High:</strong> <span style={{ color: '#4CAF50' }}>${candle.high?.toFixed(2)}</span></div>
-                            <div><strong>Low:</strong> <span style={{ color: '#f44336' }}>${candle.low?.toFixed(2)}</span></div>
-                            <div><strong>Close:</strong> <span style={{ color: candle.close > candle.open ? '#4CAF50' : '#f44336' }}>${candle.close?.toFixed(2)}</span></div>
-                            <div style={{ gridColumn: 'span 2' }}><strong>Volume:</strong> <span style={{ color: '#ff9800' }}>{candle.volume?.toLocaleString()}</span></div>
-                            <div style={{ gridColumn: 'span 2', fontSize: '0.8em', color: '#888' }}>
-                              Candle Time: {timestamp}
-                            </div>
-                          </div>
-                        </div>
-                      ))
-                    }
-                  </div>
-                </div>
-              )}
+          {activeStocks.size > 0 && (
+            <div style={{ marginTop: '10px' }}>
+              <strong>Active Stocks ({activeStocks.size}):</strong>{' '}
+              {Array.from(activeStocks.keys()).join(', ')}
             </div>
           )}
         </div>
+
+        {/* Stock Charts Grid */}
+        {activeStocks.size === 0 ? (
+          <div className="card" style={{ textAlign: 'center', padding: '40px' }}>
+            <p style={{ fontSize: '18px', color: '#888' }}>
+              No stocks added yet. Search for a stock symbol above and click "View" to start streaming.
+            </p>
+          </div>
+        ) : (
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(600px, 1fr))',
+            gap: '20px',
+            marginTop: '20px'
+          }}>
+            {Array.from(activeStocks.entries()).map(([symbol, subscription]) => (
+              <div key={symbol} className="card" style={{ textAlign: 'left', position: 'relative' }}>
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: '10px'
+                }}>
+                  <h2 style={{ margin: 0 }}>
+                    {symbol}
+                    {subscription.status === 'streaming' && (
+                      <span style={{ marginLeft: '10px', fontSize: '14px', color: '#4CAF50' }}>
+                        🔴 Live
+                      </span>
+                    )}
+                    {subscription.status === 'loading' && (
+                      <span style={{ marginLeft: '10px', fontSize: '14px', color: '#ff9800' }}>
+                        Loading...
+                      </span>
+                    )}
+                    {subscription.status === 'error' && (
+                      <span style={{ marginLeft: '10px', fontSize: '14px', color: '#f44336' }}>
+                        Error
+                      </span>
+                    )}
+                  </h2>
+                  <button
+                    onClick={() => removeStock(symbol)}
+                    style={{
+                      padding: '8px 16px',
+                      fontSize: '14px',
+                      backgroundColor: '#f44336',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Remove
+                  </button>
+                </div>
+
+                {subscription.status === 'error' && (
+                  <div style={{
+                    padding: '10px',
+                    backgroundColor: '#ffebee',
+                    color: '#c62828',
+                    borderRadius: '4px',
+                    marginBottom: '10px'
+                  }}>
+                    Error: {subscription.errorMessage || 'Unknown error'}
+                  </div>
+                )}
+
+                {subscription.status === 'loading' && (
+                  <div style={{
+                    padding: '40px',
+                    textAlign: 'center',
+                    color: '#888'
+                  }}>
+                    Connecting to {symbol}...
+                  </div>
+                )}
+
+                {subscription.status === 'streaming' && subscription.stockData?.candles &&
+                 Object.keys(subscription.stockData.candles).length > 0 && (
+                  <LightweightStockChart
+                    symbol={subscription.stockData.symbol}
+                    candles={subscription.stockData.candles}
+                  />
+                )}
+
+                {subscription.status === 'streaming' &&
+                 (!subscription.stockData?.candles || Object.keys(subscription.stockData.candles).length === 0) && (
+                  <div style={{
+                    padding: '40px',
+                    textAlign: 'center',
+                    color: '#888'
+                  }}>
+                    Waiting for data from {symbol}...
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* News Feed */}
+        <NewsFeed backendUrl={BACKEND_URL} />
       </div>
     </>
   )
