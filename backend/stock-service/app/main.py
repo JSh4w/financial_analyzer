@@ -105,11 +105,11 @@ def broadcast_update(update_data: dict):
             except asyncio.QueueFull:
                 # Mark for removal if queue is full
                 dead_queues.append(queue)
-                logger.warning(f"SSE queue full for {symbol}, removing connection")
+                logger.warning("SSE queue full for %s, removing connection", symbol)
             except Exception as e:
                 # Mark for removal if any other error
                 dead_queues.append(queue)
-                logger.warning(f"SSE broadcast error for {symbol}: {e}")
+                logger.warning("SSE broadcast error for %s: %s", symbol, e)
 
         # Clean up dead connections
         for dead_queue in dead_queues:
@@ -118,9 +118,9 @@ def broadcast_update(update_data: dict):
             except ValueError:
                 pass
 
-        logger.debug(f"Broadcasted to {successful_broadcasts}/{connection_count} SSE connections for {symbol}")
+        logger.debug("Broadcasted to %s/%s SSE connections for %s", successful_broadcasts, connection_count, symbol)
     else:
-        logger.debug(f"No SSE connections for symbol {symbol}")
+        logger.debug("No SSE connections for symbol %s", symbol)
 
 async def connect_to_websocket(websocket = WebSocketManager, uri = None,output_queue=None, **kwargs):
     """Connect to the WebSocketManager and return it started"""
@@ -284,7 +284,7 @@ async def subscribe_to_symbol(symbol : str):
         else:
             return {"message": f"Failed to subscribe to {symbol}", "status": "error"}
     except Exception as e:
-        logger.error(f"Subscription error for {symbol}: {e}")
+        logger.error("Subscription error for %s: %s", symbol, e)
         return {"message": f"Failed to subscribe to {symbol}: {str(e)}", "status": "error"}
 
 @app.get("/ws_manager/close/{symbol}")
@@ -310,7 +310,7 @@ async def unsubscribe_to_symbol(symbol : str):
         else:
             return {"message": f"Failed to unsubscribe from {symbol}", "status": "error"}
     except Exception as e:
-        logger.error(f"Unsubscription error for {symbol}: {e}")
+        logger.error("Unsubscription error for %s: %s", symbol, e)
         return {"message": f"Failed to unsubscribe from {symbol}: {str(e)}", "status": "error"}
 
 # Data Aggregator Endpoints
@@ -584,11 +584,11 @@ async def tradingview_history(
             tv_bars["c"].append(candle["close"])
             tv_bars["v"].append(candle["volume"])
 
-        logger.info(f"Returned {len(tv_bars['t'])} bars for {symbol} from {from_timestamp} to {to_timestamp}")
+        logger.info("Returned %s bars for %s from %s to %s", len(tv_bars['t']), symbol, from_timestamp, to_timestamp)
         return tv_bars
 
     except Exception as e:
-        logger.error(f"TradingView history error for {symbol}: {e}")
+        logger.error("TradingView history error for %s: %s", symbol, e)
         raise HTTPException(status_code=500, detail=f"Error fetching history: {str(e)}") from e
 
 
