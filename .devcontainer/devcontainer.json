@@ -29,7 +29,7 @@
 		// Add Node.js for frontend development
 		"ghcr.io/devcontainers/features/node:1": {
 			"nodeGypDependencies": true,
-			"version": "18"
+			"version": "20"
 		}
 	},
 	
@@ -52,5 +52,6 @@
 	  }
 	},
 
-   "postStartCommand": "npm install -g @anthropic-ai/claude-code"
+   "postStartCommand": "npm install -g @anthropic-ai/claude-code; npm install -g @google/gemini-cli@latest"
+
 }
