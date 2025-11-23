@@ -26,5 +26,8 @@ class Settings(BaseSettings):
     ALPACA_TEST_URL: str = "wss://stream.data.alpaca.markets/v2/test"
     ALPACA_API_KEY : str =  "demo_key"
     ALPACA_API_SECRET : str = "demo_secret"
+    SUPABASE_URL : str = "url"
+    SUPABASE_KEY : str = "key"
+    SUPABSE_JWT_SECRET : str = "secret"
     MODAL_TOKEN_ID : str = "demo"
     MODAL_TOKEN_SECRET : str = "demo"
