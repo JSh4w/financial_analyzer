@@ -11,6 +11,9 @@
   },
   "dependencies": {
     "@sentry/react": "^10.18.0",
+    "@supabase/auth-ui-react": "^0.4.7",
+    "@supabase/auth-ui-shared": "^0.1.8",
+    "@supabase/supabase-js": "^2.84.0",
     "@types/echarts": "^4.9.22",
     "echarts": "^6.0.0",
     "lightweight-charts": "^5.0.9",
