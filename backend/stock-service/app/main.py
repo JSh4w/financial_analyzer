@@ -321,8 +321,8 @@ async def subscribe_to_symbol(
 
         if success:
             return {"message": "Subscribed to symbol successfully", "status": "subscribed", "symbol": symbol}
-        else:
-            return {"message": f"Failed to subscribe to {symbol}", "status": "error"}
+
+        return {"message": f"Failed to subscribe to {symbol}", "status": "error"}
     except Exception as e:
         logger.error("Subscription error for %s: %s", symbol, e)
         return {"message": f"Failed to subscribe to {symbol}: {str(e)}", "status": "error"}
