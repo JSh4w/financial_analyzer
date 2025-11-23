@@ -217,8 +217,9 @@ async def lifespan(app: FastAPI):
     logger.info("SubscriptionManager initialized and wired")
 
 
-    # Handle news after
+    # Handle news
     news_queue = asyncio.Queue(500)
+    app.state.news_queue = news_queue
 
     app.state.news_db_manager = NewsDataManager(db_connection=db_connection)
     app.state.news_ws = await connect_to_websocket(
@@ -227,13 +228,14 @@ async def lifespan(app: FastAPI):
         output_queue=news_queue
         )
 
-    asyncio.create_task(broadcast_news(news_queue))
+    app.state.news_broadcast_task = asyncio.create_task(broadcast_news(news_queue))
 
 
     yield  # App runs here
 
     # SHUTDOWN: Clean up when app stops
-    print("Shutting down application components...")
+    logger.info("Shutting down application components...")
+
     if hasattr(app.state, 'data_aggregator'):
         await app.state.data_aggregator.shutdown()
 
@@ -243,11 +245,22 @@ async def lifespan(app: FastAPI):
     if hasattr(app.state, 'demo_ws_manager'):
         await app.state.demo_ws_manager.stop()
 
-    if hasattr(app.state, 'db_manager'):
-        app.state.db_manager.close()
-
     if hasattr(app.state, 'news_ws'):
         await app.state.news_ws.stop()
+
+    # Stop news broadcast task
+    if hasattr(app.state, 'news_queue'):
+        await app.state.news_queue.put(None)  # Sentinel to stop broadcast loop
+    if hasattr(app.state, 'news_broadcast_task'):
+        app.state.news_broadcast_task.cancel()
+        try:
+            await app.state.news_broadcast_task
+        except asyncio.CancelledError:
+            pass
+        logger.info("News broadcast task stopped")
+
+    if hasattr(app.state, 'db_manager'):
+        app.state.db_manager.close()
 
 app = FastAPI(
     title="Stock Market Data Service",
@@ -454,17 +467,14 @@ async def stream_stock_data(
     async def event_stream():
         try:
             while True:
-                # Wait for updates from StockHandler via broadcast
                 update_data = await sse_queue.get()
                 yield f"data: {json.dumps(update_data)}\n\n"
         except asyncio.CancelledError:
-            # Clean up connection when client disconnects
-            await remove_sse_connection(symbol, sse_queue)
-            raise
+            logger.info("Stock stream cancelled for %s", symbol)
         except Exception as e:
-            # Clean up on any error
+            logger.error("Stock stream error for %s: %s", symbol, e)
+        finally:
             await remove_sse_connection(symbol, sse_queue)
-            raise e
 
     return StreamingResponse(
         event_stream(),
@@ -651,26 +661,23 @@ async def stream_news_data():
             while True:
                 update_data = await n_queue.get()
 
-                # Handle shutdown signal early
+                # Handle shutdown signal
                 if update_data is None:
-                    logger.info("News Strem shutdown signal received")
+                    logger.info("News stream shutdown signal received")
                     break
                 try:
                     update_data = NewsWebsocket.process_news_data(update_data)
                     yield f"data: {json.dumps(update_data)}\n\n"
                 except (KeyError, ValueError) as e:
-                    logger.warning("Invalid news data, skipping %s", e)
-                    continue  # Skip this item, keep streaming
+                    logger.warning("Invalid news data, skipping: %s", e)
+                    continue
         except asyncio.CancelledError:
             logger.info("News stream cancelled by client disconnect")
-            raise
         except Exception as e:
-            logger.error("Unexpected error in news stream: %s", e, exc_info=True)
-            raise
+            logger.error("Unexpected error in news stream: %s", e)
         finally:
-            # Cleanup
             remove_news_connection(queue=n_queue)
-            logger.debug("News Connection cleaned up ")
+            logger.debug("News connection cleaned up")
 
     return StreamingResponse(
         event_stream(),
@@ -683,4 +690,10 @@ async def stream_news_data():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8001, reload=True)
+    uvicorn.run(
+        "app.main:app",
+        host="0.0.0.0",
+        port=8001,
+        reload=True,
+        timeout_graceful_shutdown=5  # Force close connections after 5 seconds
+    )
