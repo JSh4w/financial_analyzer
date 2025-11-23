@@ -67,16 +67,21 @@ class NewsWebsocket:
     async def listen(self):
         while True:
             try:
-                await self.connect()
+                if not await self.connect():
+                    logger.warning("Connection failed, retrying in 5 seconds...")
+                    await asyncio.sleep(5)
+                    continue
+                
                 message_count = 0 
-                async for message in self._websocket:
-                    message_count +=1
-                    if message == 1:
-                        logger.debug("Recieved ping")
-                        continue
-                    if isinstance(message, bytes):
-                        message = message.decode('utf-8')
-                    await self.process(message)
+                if self._websocket:
+                    async for message in self._websocket:
+                        message_count +=1
+                        if message == 1:
+                            logger.debug("Recieved ping")
+                            continue
+                        if isinstance(message, bytes):
+                            message = message.decode('utf-8')
+                        await self.process(message)
             except(websockets.exceptions.ConnectionClosed,
                     websockets.exceptions.InvalidURI,
                     websockets.exceptions.WebSocketException,
@@ -85,6 +90,9 @@ class NewsWebsocket:
                 if not await self.connect():
                     logger.error("Reconnection failed, stopping listener")
                     break
+            except asyncio.CancelledError:
+                logger.info("News websocket listener task cancelled.")
+                break
             except Exception as e:
                 logger.error("Unexpected error (%s: %s), attempting reconnect...", type(e).__name__, e)
                 if not await self.connect():

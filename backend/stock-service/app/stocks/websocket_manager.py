@@ -474,24 +474,25 @@ class WebSocketManager:
                     await self._auto_reconnect()
 
                 message_count = 0
-                async for message in self._websocket:
-                    message_count += 1
+                if self._websocket:
+                    async for message in self._websocket:
+                        message_count += 1
 
-                    # Reset consecutive failures after receiving a few messages
-                    # This means connection is stable
-                    if message_count == 5 and self._consecutive_failures > 0:
-                        logger.info(
-                            "Connection stable, resetting consecutive failure count"
-                        )
-                        self._consecutive_failures = 0
+                        # Reset consecutive failures after receiving a few messages
+                        # This means connection is stable
+                        if message_count == 5 and self._consecutive_failures > 0:
+                            logger.info(
+                                "Connection stable, resetting consecutive failure count"
+                            )
+                            self._consecutive_failures = 0
 
-                    if message == 1:
-                        logger.debug("Recieved ping")
-                        continue
-                    if isinstance(message, bytes):
-                        message = message.decode("utf-8")
-                    logger.info("Processing message %s", message)
-                    await self._process_message(message)
+                        if message == 1:
+                            logger.debug("Recieved ping")
+                            continue
+                        if isinstance(message, bytes):
+                            message = message.decode("utf-8")
+                        logger.info("Processing message %s", message)
+                        await self._process_message(message)
 
                 # Connection closed normally - check if it was immediate
                 connection_duration = asyncio.get_event_loop().time() - connection_start
@@ -534,6 +535,9 @@ class WebSocketManager:
                 if not await self._auto_reconnect():
                     logger.error("Reconnection failed, stopping listener")
                     break
+            except asyncio.CancelledError:
+                logger.info("Listening task was cancelled.")
+                break
             except Exception as e:
                 logger.error(
                     "Unexpected error (%s: %s), attempting reconnect...",
@@ -595,7 +599,9 @@ class WebSocketManager:
                 request = await self.subscription_queue.get()
                 await self._handle_queue_request(request)
                 self.subscription_queue.task_done()
-
+            except asyncio.CancelledError:
+                logger.info("Subscription processing task cancelled.")
+                break
             except Exception as e:
                 logger.error("Error processing subscription queue: %s", e)
                 self.subscription_queue.task_done()
