@@ -56,11 +56,9 @@ class NewsWebsocket:
             return True
         except websockets.exceptions.InvalidStatus as e:
             logger.error("Connection failed, possible due to an invalid key: %s",e)
-            self._websocket = None
             return False
         except Exception as e:
             logger.error("Connection failed %s",e)
-            self._websocket = None
             return False
 
 

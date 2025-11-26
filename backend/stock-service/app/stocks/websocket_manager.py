@@ -6,11 +6,12 @@ import json
 import asyncio
 import logging
 import copy
+import time 
 from enum import Enum
 
 import websockets
 
-
+from app.stocks.errors import ConnectionFailedError
 from app.config import Settings
 
 settings = Settings()
@@ -114,10 +115,9 @@ class WebSocketManager:
         self.active_subscriptions: Dict[str, Dict[str, Set[int]]] = {}
         self._subscription_task: Optional[asyncio.Task] = None
 
-        self._max_reconnect_attempts = 5
+        self._max_reconnect_attempts = 3
         self._reconnect_delay = 2
         self._max_reconnect_delay = 60  # Max 60 seconds between attempts
-        self._consecutive_failures = 0  # Track consecutive connection failures
 
         self.connection_task: Optional[asyncio.Task] = None
         self.queueing_task: Optional[asyncio.Task] = None
@@ -127,44 +127,50 @@ class WebSocketManager:
         logger.info("Attempting to connect to WebSocket: %s",self._uri)
         async with self._state_lock:
             if self.state == ConnectionState.CONNECTED:
+                logger.info("Already connected")
                 return True  # Exit True no need to change anything
             if self.state == ConnectionState.CONNECTING:
+                logger.info("Already connecting")
                 return False  # Already processing, dont update
             if self.state == ConnectionState.SHUTTING_DOWN:
+                logger.info("Websocket is shutdown")
                 return False  # Dont try and start during shutdown
-
             # If reconnecting or disconnecting I want to proceed
             self.state = ConnectionState.CONNECTING
-
         try:
+
             async with self._state_lock:
                 # Reconnect all symbols
-                symbols_to_reconnect = copy.deepcopy(self.active_subscriptions)
-                
                 self._websocket = await websockets.connect(
-                    self._uri, additional_headers=self._headers
+                    self._uri, additional_headers=self._headers, ping_interval=None
                 )
-
                 # Alpaca sends two messages on connect:
                 # 1. Welcome message
                 connect_response = await asyncio.wait_for(
                     self._websocket.recv(), timeout=10
                 )
-                logger.info("Connect response: %s", json.loads(connect_response))
-
+                logger.debug("Connect response: %s", json.loads(connect_response))
                 # 2. Authentication response
-                auth_response = await asyncio.wait_for(self._websocket.recv(), timeout=10)
-                logger.info("Auth response: %s",json.loads(auth_response))
-
+                raw_auth = await asyncio.wait_for(self._websocket.recv(), timeout=10)
+                auth_data = json.loads(raw_auth)
+                logger.info("Auth response: %s",auth_data)
+                if isinstance(auth_data, list) and len(auth_data) >0:
+                    first_msg = auth_data[0]
+                    if auth_data[0].get('T')=='error':
+                        code, msg = first_msg.get('code'), first_msg.get('msg')
+                        logger.error("Auth failed %s, %s", code,msg)
+                        self.state = ConnectionState.DISCONNECTED
+                        raise ConnectionFailedError(msg,code)
                 self.state = ConnectionState.CONNECTED
                 logger.info("Connected to Alpaca WebSocket")
-
+                # Snapshot of active subscriptions
+                symbols_to_reconnect = copy.deepcopy(self.active_subscriptions)
 
             failed_symbols = []
             for symbol in symbols_to_reconnect.keys():
                 async with self._symbol_subscription_locks[symbol]:
                     if symbol not in self.active_subscriptions:
-                        continue 
+                        continue
                     for _type in list(symbols_to_reconnect[symbol].keys()):
                         if _type not in self.active_subscriptions[symbol]:
                             continue
@@ -173,13 +179,15 @@ class WebSocketManager:
                             failed_symbols.append((symbol, type))
             if failed_symbols:
                 logger.warning("Failed to resubsribe to symbols: %s ", failed_symbols)
-            return True 
+            return True
         except Exception as e:
-            logger.error("Connection failed %s", e)
+            logger.info("Disconnected for another reason")
             async with self._state_lock:
+                await self._websocket.close()
                 self.state = ConnectionState.DISCONNECTED
-                self._websocket = None
-            return False
+            raise e
+
+
 
     async def disconnect(self):
         """Close WebSocket connection and clear attributed"""
@@ -388,46 +396,44 @@ class WebSocketManager:
     async def _auto_reconnect(self) -> bool:
         """Reconnect if connection is broken with exponential backoff"""
 
-        self._consecutive_failures += 1
-        # Cap consecutive failures to prevent overflow
-        self._consecutive_failures = min(self._consecutive_failures, 20)
-
-        for attempt in range(1, self._max_reconnect_attempts + 1):
+        for attempt in range(0, self._max_reconnect_attempts+1):
             # Exponential backoff: delay grows with consecutive failures
             # 2s, 4s, 8s, 16s, 32s, 60s (max)
             base_delay = self._reconnect_delay * attempt
-            backoff_multiplier = min(2 ** (self._consecutive_failures - 1), 8)
-            delay = min(base_delay * backoff_multiplier, self._max_reconnect_delay)
-
+            delay = min(base_delay, self._max_reconnect_delay)
             logger.info(
-                "reconnect attempt %s/%s (consecutive failures: %s), waiting %ss",
+                "Attempt %s/%s, waiting %ss",
                 attempt,
                 self._max_reconnect_attempts,
-                self._consecutive_failures,
                 delay,
             )
-
             await asyncio.sleep(delay)
+            try:
+                if await self.connect():
+                    return True
+            except ConnectionFailedError as e:
+                if int(e.code) in [401, 403, 404]:
+                    logger.critical("FATAL ERROR: Server rejected handshake with %s.",e.code)
+                    logger.critical("Check your API Key and URL. NOT Retrying.")
+                    raise ConnectionFailedError(e.message,e.code) from e 
+            except websockets.exceptions.ConnectionClosed as e:
+                if e.code in [1008, 1002, 1003]:
+                    logger.critical("FATAL: Connection closed by server. Code: %s" , e.code)
+                    raise ConnectionFailedError("Connection closed by server",e.code) from e
+                if e.code in [1006]:
+                    logger.info("Improper handshake closing, try again")
+                    continue
+            except (OSError, asyncio.TimeoutError) as e:
+                logger.error("Network error : %s", e)
+                continue
+            except Exception as e:
+                logger.info("Unknown error: %s,  trying again",e)
+                continue
+            finally:
+                if attempt == self._max_reconnect_attempts:
+                    logger.info("Sleeping for 10 minutes ")
+                    await asyncio.sleep(600)   
 
-            if await self.connect():
-                logger.info("Reconnection successful after %s attempts", attempt)
-                self._consecutive_failures = 0  # Reset on success
-                self._last_connected = time.time()
-                return True
-
-        logger.error(
-            "All reconnection attempts failed (consecutive failures: %s)",
-            self._consecutive_failures,
-        )
-
-        # After max attempts, wait a long time before trying again
-        if self._consecutive_failures > 10:
-            logger.warning(
-                "Too many consecutive failures, entering extended backoff (5 minutes)"
-            )
-            await asyncio.sleep(300)  # 5 minutes
-
-        return False
 
     async def _process_message(self, message: str):
         """Process incoming Alpaca WebSocket messages"""
@@ -466,26 +472,11 @@ class WebSocketManager:
         """Start listening for a WebSocket message"""
         while True:
             try:
-                connection_start = asyncio.get_event_loop().time()
-
-                connected = await self.connect()
-                if not connected:
-                    logger.info("Could not connect, attempting reconnect")
+                if not self._websocket:
                     await self._auto_reconnect()
 
-                message_count = 0
                 if self._websocket:
                     async for message in self._websocket:
-                        message_count += 1
-
-                        # Reset consecutive failures after receiving a few messages
-                        # This means connection is stable
-                        if message_count == 5 and self._consecutive_failures > 0:
-                            logger.info(
-                                "Connection stable, resetting consecutive failure count"
-                            )
-                            self._consecutive_failures = 0
-
                         if message == 1:
                             logger.debug("Recieved ping")
                             continue
@@ -493,61 +484,27 @@ class WebSocketManager:
                             message = message.decode("utf-8")
                         logger.info("Processing message %s", message)
                         await self._process_message(message)
-
-                # Connection closed normally - check if it was immediate
-                connection_duration = asyncio.get_event_loop().time() - connection_start
-
-                if connection_duration < 5 and message_count < 3:
-                    # Connection closed within 5 seconds with few messages
-                    # Likely market is closed or no subscriptions
-                    logger.warning(
-                        "Connection closed quickly (%.1fs, %d messages). "
-                        "Market may be closed or no active subscriptions. "
-                        "Will retry with backoff.",
-                        connection_duration,
-                        message_count,
-                    )
-                    # Treat quick disconnects as failures to trigger backoff
-                    if not await self._auto_reconnect():
-                        logger.error("Reconnection failed, stopping listener")
-                        break
-                else:
-                    # Normal disconnection after activity - reconnect immediately
-                    logger.info(
-                        "Connection closed after %.1fs and %d messages, reconnecting...",
-                        connection_duration,
-                        message_count,
-                    )
-                    async with self._state_lock:
-                        self.state = ConnectionState.DISCONNECTED
-
-            except websockets.exceptions.ConnectionClosed:
-                logger.warning("Connection closed by API")
-
-            except (
-                websockets.exceptions.InvalidURI,
-                websockets.exceptions.WebSocketException,
-                asyncio.TimeoutError,
-            ) as e:
-                logger.warning(
-                    "Connection issue (%s), attempting reconnect...", type(e).__name__
-                )
-                if not await self._auto_reconnect():
-                    logger.error("Reconnection failed, stopping listener")
-                    break
+            #Error code during connection
+            except ConnectionFailedError as e:
+                logger.warning("FAIL: %s",e)
+                return 
+            # # Closed from the server side
+            except websockets.exceptions.ConnectionClosed as e:
+                if e.code in [1008, 1002, 1003]:
+                    logger.critical("FATAL: Connection closed by server. Code: %s" , e.code)
+                    return
+                logger.warning("Connection lost. Code: %s", e.code)
+                await self._auto_reconnect()
+            # DNS / Wifi / Timeout failures
+            except (OSError, asyncio.TimeoutError) as e:
+                logger.error("Network error: %s", e)
+                self._websocket = None
+                await self._auto_reconnect()
+            # Shutdown from command line
             except asyncio.CancelledError:
-                logger.info("Listening task was cancelled.")
+                if self._websocket:
+                    await self._websocket.close()
                 break
-            except Exception as e:
-                logger.error(
-                    "Unexpected error (%s: %s), attempting reconnect...",
-                    type(e).__name__,
-                    e,
-                )
-                if not await self._auto_reconnect():
-                    logger.error("Reconnection failed, stopping listener")
-                    break
-
     async def start(self):
         """Start the WebSocket manager"""
         if self.connection_task and not self.connection_task.done():
