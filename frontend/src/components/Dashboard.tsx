@@ -30,6 +30,7 @@ interface StockSubscription {
 export default function Dashboard() {
   const [searchSymbol, setSearchSymbol] = useState('')
   const [activeStocks, setActiveStocks] = useState<Map<string, StockSubscription>>(new Map())
+  const [selectedStock, setSelectedStock] = useState<string | null>(null)
   const [globalStatus, setGlobalStatus] = useState('')
   const eventSourcesRef = useRef<Map<string, EventSource>>(new Map())
 
@@ -95,6 +96,7 @@ export default function Dashboard() {
           }
           return updated
         })
+        setSelectedStock(upperSymbol) // Set the new stock as selected
         setGlobalStatus(`✅ Now streaming ${upperSymbol}`)
       }
 
@@ -176,6 +178,13 @@ export default function Dashboard() {
     setActiveStocks(prev => {
       const updated = new Map(prev)
       updated.delete(upperSymbol)
+
+      // If the removed stock was selected, select a new one
+      if (selectedStock === upperSymbol) {
+        const firstStockKey = updated.keys().next().value
+        setSelectedStock(firstStockKey || null)
+      }
+
       return updated
     })
 
@@ -266,104 +275,134 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* Stock Charts Grid */}
+        {/* Tabs for Active Stocks */}
+        {activeStocks.size > 0 && (
+          <div className="stock-tabs" style={{ marginBottom: '20px', borderBottom: '2px solid #eee' }}>
+            {Array.from(activeStocks.keys()).map((symbol) => (
+              <button
+                key={symbol}
+                onClick={() => setSelectedStock(symbol)}
+                className={`tab-button ${selectedStock === symbol ? 'active' : ''}`}
+                style={{
+                  padding: '10px 20px',
+                  border: 'none',
+                  background: selectedStock === symbol ? '#fff' : 'transparent',
+                  cursor: 'pointer',
+                  fontSize: '16px',
+                  borderTopLeftRadius: '8px',
+                  borderTopRightRadius: '8px',
+                  borderBottom: selectedStock === symbol ? '2px solid #008CBA' : '2px solid transparent',
+                  marginBottom: '-2px'
+                }}
+              >
+                {symbol}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Selected Stock Chart */}
         {activeStocks.size === 0 ? (
           <div className="card" style={{ textAlign: 'center', padding: '40px' }}>
             <p style={{ fontSize: '18px', color: '#888' }}>
               No stocks added yet. Search for a stock symbol above and click "View" to start streaming.
             </p>
           </div>
-        ) : (
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(600px, 1fr))',
-            gap: '20px',
-            marginTop: '20px'
-          }}>
-            {Array.from(activeStocks.entries()).map(([symbol, subscription]) => (
-              <div key={symbol} className="card" style={{ textAlign: 'left', position: 'relative' }}>
+        ) : selectedStock ? (() => {
+          const subscription = activeStocks.get(selectedStock)
+          if (!subscription) return null
+
+          const symbol = subscription.symbol
+
+          return (
+            <div key={symbol} className="card" style={{ textAlign: 'left', position: 'relative' }}>
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '10px'
+              }}>
+                <h2 style={{ margin: 0 }}>
+                  {symbol}
+                  {subscription.status === 'streaming' && (
+                    <span style={{ marginLeft: '10px', fontSize: '14px', color: '#4CAF50' }}>
+                      🔴 Live
+                    </span>
+                  )}
+                  {subscription.status === 'loading' && (
+                    <span style={{ marginLeft: '10px', fontSize: '14px', color: '#ff9800' }}>
+                      Loading...
+                    </span>
+                  )}
+                  {subscription.status === 'error' && (
+                    <span style={{ marginLeft: '10px', fontSize: '14px', color: '#f44336' }}>
+                      Error
+                    </span>
+                  )}
+                </h2>
+                <button
+                  onClick={() => removeStock(symbol)}
+                  style={{
+                    padding: '8px 16px',
+                    fontSize: '14px',
+                    backgroundColor: '#f44336',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Remove
+                </button>
+              </div>
+
+              {subscription.status === 'error' && (
                 <div style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
+                  padding: '10px',
+                  backgroundColor: '#ffebee',
+                  color: '#c62828',
+                  borderRadius: '4px',
                   marginBottom: '10px'
                 }}>
-                  <h2 style={{ margin: 0 }}>
-                    {symbol}
-                    {subscription.status === 'streaming' && (
-                      <span style={{ marginLeft: '10px', fontSize: '14px', color: '#4CAF50' }}>
-                        🔴 Live
-                      </span>
-                    )}
-                    {subscription.status === 'loading' && (
-                      <span style={{ marginLeft: '10px', fontSize: '14px', color: '#ff9800' }}>
-                        Loading...
-                      </span>
-                    )}
-                    {subscription.status === 'error' && (
-                      <span style={{ marginLeft: '10px', fontSize: '14px', color: '#f44336' }}>
-                        Error
-                      </span>
-                    )}
-                  </h2>
-                  <button
-                    onClick={() => removeStock(symbol)}
-                    style={{
-                      padding: '8px 16px',
-                      fontSize: '14px',
-                      backgroundColor: '#f44336',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '4px',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    Remove
-                  </button>
+                  Error: {subscription.errorMessage || 'Unknown error'}
                 </div>
+              )}
 
-                {subscription.status === 'error' && (
-                  <div style={{
-                    padding: '10px',
-                    backgroundColor: '#ffebee',
-                    color: '#c62828',
-                    borderRadius: '4px',
-                    marginBottom: '10px'
-                  }}>
-                    Error: {subscription.errorMessage || 'Unknown error'}
-                  </div>
-                )}
+              {subscription.status === 'loading' && (
+                <div style={{
+                  padding: '40px',
+                  textAlign: 'center',
+                  color: '#888'
+                }}>
+                  Connecting to {symbol}...
+                </div>
+              )}
 
-                {subscription.status === 'loading' && (
-                  <div style={{
-                    padding: '40px',
-                    textAlign: 'center',
-                    color: '#888'
-                  }}>
-                    Connecting to {symbol}...
-                  </div>
-                )}
+              {subscription.status === 'streaming' && subscription.stockData?.candles &&
+               Object.keys(subscription.stockData.candles).length > 0 && (
+                <LightweightStockChart
+                  symbol={subscription.stockData.symbol}
+                  candles={subscription.stockData.candles}
+                />
+              )}
 
-                {subscription.status === 'streaming' && subscription.stockData?.candles &&
-                 Object.keys(subscription.stockData.candles).length > 0 && (
-                  <LightweightStockChart
-                    symbol={subscription.stockData.symbol}
-                    candles={subscription.stockData.candles}
-                  />
-                )}
-
-                {subscription.status === 'streaming' &&
-                 (!subscription.stockData?.candles || Object.keys(subscription.stockData.candles).length === 0) && (
-                  <div style={{
-                    padding: '40px',
-                    textAlign: 'center',
-                    color: '#888'
-                  }}>
-                    Waiting for data from {symbol}...
-                  </div>
-                )}
-              </div>
-            ))}
+              {subscription.status === 'streaming' &&
+               (!subscription.stockData?.candles || Object.keys(subscription.stockData.candles).length === 0) && (
+                <div style={{
+                  padding: '40px',
+                  textAlign: 'center',
+                  color: '#888'
+                }}>
+                  Waiting for data from {symbol}...
+                </div>
+              )}
+            </div>
+          )
+        })() : (
+          <div className="card" style={{ textAlign: 'center', padding: '40px' }}>
+            <p style={{ fontSize: '18px', color: '#888' }}>
+              Please select a stock to view.
+            </p>
           </div>
         )}
 
