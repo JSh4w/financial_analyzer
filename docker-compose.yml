@@ -7,7 +7,8 @@ services:
     ports:
       - "8001:8001"
     env_file:
-      - ./backend/stock-service/.env
+      - path: ./backend/stock-service/.env
+        required: false
     environment:
       - FINNHUB_API_KEY=${FINNHUB_API_KEY}
       - FINNHUB_BASE_URL=${FINNHUB_BASE_URL}
