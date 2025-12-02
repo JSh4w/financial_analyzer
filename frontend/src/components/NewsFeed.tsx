@@ -64,145 +64,148 @@ function NewsFeed({ backendUrl }: NewsFeedProps) {
 
   return (
     <div style={{
-      backgroundColor: '#1a1a1a',
-      borderRadius: '8px',
-      padding: '20px',
-      marginTop: '20px'
+      height: '100%',
+      display: 'flex',
+      flexDirection: 'column',
+      padding: '24px'
     }}>
       <div style={{
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: '15px'
+        marginBottom: '20px'
       }}>
-        <h2 style={{ margin: 0 }}>Market News</h2>
+        <h2 style={{ margin: 0, fontSize: '18px', fontWeight: '600', color: '#e0e0e0' }}>Market News</h2>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           {status === 'connected' && (
             <>
               <span style={{
-                width: '8px',
-                height: '8px',
-                backgroundColor: '#4CAF50',
+                width: '6px',
+                height: '6px',
+                backgroundColor: '#10b981',
                 borderRadius: '50%',
                 display: 'inline-block'
               }} />
-              <span style={{ fontSize: '14px', color: '#4CAF50' }}>Live</span>
+              <span style={{ fontSize: '12px', color: '#10b981' }}>Live</span>
             </>
           )}
           {status === 'connecting' && (
-            <span style={{ fontSize: '14px', color: '#ff9800' }}>Connecting...</span>
+            <span style={{ fontSize: '12px', color: '#f59e0b' }}>Connecting...</span>
           )}
           {status === 'error' && (
-            <span style={{ fontSize: '14px', color: '#f44336' }}>Connection Error</span>
+            <span style={{ fontSize: '12px', color: '#ef4444' }}>Error</span>
           )}
         </div>
       </div>
 
       <div style={{
-        maxHeight: '400px',
+        flex: 1,
         overflowY: 'auto',
-        border: '1px solid #333',
-        borderRadius: '4px',
-        padding: '10px'
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '12px'
       }}>
         {newsItems.length === 0 ? (
           <div style={{
             textAlign: 'center',
-            padding: '20px',
-            color: '#888'
+            padding: '40px 20px',
+            color: '#666',
+            fontSize: '14px'
           }}>
             Waiting for news...
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {newsItems.map((item, index) => (
-              <div
-                key={index}
-                style={{
-                  backgroundColor: '#242424',
-                  borderRadius: '4px',
-                  padding: '12px',
-                  cursor: 'pointer',
-                  transition: 'background-color 0.2s',
-                  border: expandedIndex === index ? '1px solid #008CBA' : '1px solid transparent'
-                }}
-                onClick={() => toggleExpand(index)}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{
-                      fontWeight: 'bold',
-                      marginBottom: '6px',
-                      fontSize: '14px'
-                    }}>
-                      {item.headline}
-                    </div>
-                    {item.tickers && item.tickers.length > 0 && (
-                      <div style={{
-                        display: 'flex',
-                        gap: '6px',
-                        marginBottom: '6px',
-                        flexWrap: 'wrap'
-                      }}>
-                        {item.tickers.slice(0, 5).map((ticker, i) => (
-                          <span
-                            key={i}
-                            style={{
-                              backgroundColor: '#333',
-                              padding: '2px 8px',
-                              borderRadius: '3px',
-                              fontSize: '11px',
-                              color: '#4CAF50'
-                            }}
-                          >
-                            {ticker}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+          newsItems.map((item, index) => (
+            <div
+              key={index}
+              style={{
+                backgroundColor: '#0f0f0f',
+                borderRadius: '8px',
+                padding: '14px',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                border: expandedIndex === index ? '1px solid #3b82f6' : '1px solid #2a2a2a'
+              }}
+              onClick={() => toggleExpand(index)}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{
-                    fontSize: '12px',
-                    color: '#888',
-                    marginLeft: '12px',
-                    whiteSpace: 'nowrap'
-                  }}>
-                    {formatTime(item.time)}
-                  </div>
-                </div>
-
-                {expandedIndex === index && item.summary && (
-                  <div style={{
-                    marginTop: '12px',
-                    paddingTop: '12px',
-                    borderTop: '1px solid #333',
+                    fontWeight: '500',
+                    marginBottom: '8px',
                     fontSize: '13px',
-                    lineHeight: '1.5',
-                    color: '#ccc'
+                    lineHeight: '1.4',
+                    color: '#e0e0e0'
                   }}>
-                    {item.summary}
-                    {item.url && (
-                      <div style={{ marginTop: '8px' }}>
-                        <a
-                          href={item.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          style={{
-                            color: '#008CBA',
-                            fontSize: '12px',
-                            textDecoration: 'none'
-                          }}
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          Read more →
-                        </a>
-                      </div>
-                    )}
+                    {item.headline}
                   </div>
-                )}
+                  {item.tickers && item.tickers.length > 0 && (
+                    <div style={{
+                      display: 'flex',
+                      gap: '4px',
+                      marginBottom: '4px',
+                      flexWrap: 'wrap'
+                    }}>
+                      {item.tickers.slice(0, 5).map((ticker, i) => (
+                        <span
+                          key={i}
+                          style={{
+                            backgroundColor: '#1e3a4f',
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            fontSize: '10px',
+                            color: '#60a5fa',
+                            fontWeight: '500'
+                          }}
+                        >
+                          {ticker}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div style={{
+                  fontSize: '11px',
+                  color: '#666',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0
+                }}>
+                  {formatTime(item.time)}
+                </div>
               </div>
-            ))}
-          </div>
+
+              {expandedIndex === index && item.summary && (
+                <div style={{
+                  marginTop: '12px',
+                  paddingTop: '12px',
+                  borderTop: '1px solid #2a2a2a',
+                  fontSize: '12px',
+                  lineHeight: '1.6',
+                  color: '#a0a0a0'
+                }}>
+                  {item.summary}
+                  {item.url && (
+                    <div style={{ marginTop: '10px' }}>
+                      <a
+                        href={item.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          color: '#3b82f6',
+                          fontSize: '12px',
+                          textDecoration: 'none',
+                          fontWeight: '500'
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        Read more →
+                      </a>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ))
         )}
       </div>
     </div>
