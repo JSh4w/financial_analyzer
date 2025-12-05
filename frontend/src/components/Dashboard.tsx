@@ -3,7 +3,8 @@ import './Dashboard.css'
 import LightweightStockChart from './LightweightStockChart'
 import NewsFeed from './NewsFeed'
 import { supabase } from '../lib/supabase'
-
+import { apiClient } from '../lib/api-client'
+import { getAuthToken } from '../lib/auth'
 
 interface StockData {
   symbol: string
@@ -76,7 +77,9 @@ export default function Dashboard() {
     })
 
     try {
-      const eventSource = new EventSource(`${BACKEND_URL}/stream/${symbol}`)
+      const token = await getAuthToken()
+      if (!token) throw new Error('Not authenticated')
+      const eventSource = new EventSource(`${BACKEND_URL}/stream/${symbol}?token=${token}`)
       eventSourcesRef.current.set(symbol, eventSource)
 
       eventSource.onopen = () => {
@@ -175,8 +178,10 @@ export default function Dashboard() {
 
     try {
       // Step 1: Subscribe via WebSocket manager
-      const response = await fetch(`${BACKEND_URL}/ws_manager/${upperSymbol}`)
-      const result = await response.json()
+      const result = await apiClient.get<{status: string
+        message?: string 
+        symbol?: string
+      }>(`/ws_manager/${upperSymbol}`)
 
       if (result.status !== 'subscribed') {
         setActiveStocks(prev => {
@@ -203,7 +208,9 @@ export default function Dashboard() {
       })
 
       // Step 2: Start SSE streaming
-      const eventSource = new EventSource(`${BACKEND_URL}/stream/${upperSymbol}`)
+      const token = await getAuthToken()
+      if (!token) throw new Error('Not authenticated')
+      const eventSource = new EventSource(`${BACKEND_URL}/stream/${upperSymbol}?token=${token}`)
       eventSourcesRef.current.set(upperSymbol, eventSource)
 
       eventSource.onopen = () => {
@@ -304,7 +311,7 @@ export default function Dashboard() {
 
     // Unsubscribe from backend
     try {
-      await fetch(`${BACKEND_URL}/ws_manager/close/${upperSymbol}`)
+      await apiClient.get(`/ws_manager/close/${upperSymbol}`)
     } catch (error) {
       console.error(`Error unsubscribing from ${upperSymbol}:`, error)
     }
@@ -353,13 +360,16 @@ export default function Dashboard() {
     <div style={{
       display: 'flex',
       height: '100vh',
+      width: '100vw',
       backgroundColor: '#0f0f0f',
       color: '#e0e0e0',
-      overflow: 'hidden'
+      overflow: 'hidden',
+      margin: 0,
+      padding: 0
     }}>
       {/* Left Sidebar - Navigation */}
       <div style={{
-        width: '240px',
+        width: '200px',
         backgroundColor: '#1a1a1a',
         borderRight: '1px solid #2a2a2a',
         display: 'flex',
@@ -391,7 +401,7 @@ export default function Dashboard() {
         </div>
 
         {/* Navigation Menu */}
-        <div style={{ padding: '12px 0' }}>
+        <div style={{ padding: '5px 0' }}>
           <button
             onClick={() => setCurrentView('stocks')}
             style={{
@@ -435,11 +445,11 @@ export default function Dashboard() {
           <div style={{
             flex: 1,
             overflowY: 'auto',
-            padding: '12px 0',
+            padding: '5px 0',
             borderTop: '1px solid #2a2a2a'
           }}>
             <div style={{
-              padding: '8px 20px',
+              padding: '5px 10px',
               fontSize: '12px',
               color: '#666',
               fontWeight: '600',
@@ -452,7 +462,7 @@ export default function Dashboard() {
                 key={symbol}
                 onClick={() => switchToStock(symbol)}
                 style={{
-                  padding: '10px 20px',
+                  padding: '5px 10px',
                   cursor: 'pointer',
                   backgroundColor: selectedStock === symbol ? '#2a2a2a' : 'transparent',
                   borderLeft: selectedStock === symbol ? '3px solid #3b82f6' : '3px solid transparent',
@@ -463,10 +473,10 @@ export default function Dashboard() {
                 }}
               >
                 <div>
-                  <div style={{ fontSize: '14px', fontWeight: '500', color: '#e0e0e0' }}>
+                  <div style={{ fontSize: '12px', fontWeight: '300', color: '#e0e0e0' }}>
                     {symbol}
                   </div>
-                  <div style={{ fontSize: '11px', color: '#666', marginTop: '2px' }}>
+                  <div style={{ fontSize: '12px', color: '#666', marginTop: '2px' }}>
                     {stock.status === 'streaming' && '🔴 Live'}
                     {stock.status === 'paused' && '⏸ Paused'}
                     {stock.status === 'loading' && '⏳ Loading'}
@@ -572,7 +582,7 @@ export default function Dashboard() {
           <div style={{
             flex: '1 1 55%',
             overflowY: 'auto',
-            padding: '24px'
+            padding: '12px'
           }}>
             {currentView === 'portfolio' ? (
               <div style={{
@@ -582,7 +592,6 @@ export default function Dashboard() {
                 textAlign: 'center',
                 border: '1px solid #2a2a2a'
               }}>
-                <div style={{ fontSize: '48px', marginBottom: '20px' }}>📊</div>
                 <h2 style={{ fontSize: '24px', marginBottom: '12px', color: '#e0e0e0' }}>Portfolio</h2>
                 <p style={{ fontSize: '16px', color: '#666' }}>
                   Your portfolio view is coming soon. Track your investments, performance, and more.
@@ -596,7 +605,6 @@ export default function Dashboard() {
                 textAlign: 'center',
                 border: '1px solid #2a2a2a'
               }}>
-                <div style={{ fontSize: '48px', marginBottom: '20px' }}>📈</div>
                 <h2 style={{ fontSize: '24px', marginBottom: '12px', color: '#e0e0e0' }}>No stocks yet</h2>
                 <p style={{ fontSize: '16px', color: '#666' }}>
                   Search for a stock symbol above to start tracking.

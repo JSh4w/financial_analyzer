@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { getAuthToken } from '../lib/auth'
 
 interface NewsItem {
   time: string
@@ -20,32 +21,50 @@ function NewsFeed({ backendUrl }: NewsFeedProps) {
   const eventSourceRef = useRef<EventSource | null>(null)
 
   useEffect(() => {
-    // Connect to news stream
-    const eventSource = new EventSource(`${backendUrl}/news/stream`)
-    eventSourceRef.current = eventSource
-
-    eventSource.onopen = () => {
-      setStatus('connected')
-      console.log('News stream connected')
-    }
-
-    eventSource.onmessage = (event) => {
+    // Connect to news stream with authentication
+    const connectNewsStream = async () => {
       try {
-        const newsItem: NewsItem = JSON.parse(event.data)
-        setNewsItems((prev) => [newsItem, ...prev].slice(0, 50)) // Keep last 50 items
+        const token = await getAuthToken()
+        if (!token) {
+          console.error('Not authenticated for news stream')
+          setStatus('error')
+          return
+        }
+
+        const eventSource = new EventSource(`${backendUrl}/news/stream?token=${token}`)
+        eventSourceRef.current = eventSource
+
+        eventSource.onopen = () => {
+          setStatus('connected')
+          console.log('News stream connected')
+        }
+
+        eventSource.onmessage = (event) => {
+          try {
+            const newsItem: NewsItem = JSON.parse(event.data)
+            setNewsItems((prev) => [newsItem, ...prev].slice(0, 50)) // Keep last 50 items
+          } catch (error) {
+            console.error('Error parsing news data:', error)
+          }
+        }
+
+        eventSource.onerror = (error) => {
+          console.error('News stream error:', error)
+          setStatus('error')
+        }
       } catch (error) {
-        console.error('Error parsing news data:', error)
+        console.error('Failed to connect news stream:', error)
+        setStatus('error')
       }
     }
 
-    eventSource.onerror = (error) => {
-      console.error('News stream error:', error)
-      setStatus('error')
-    }
+    connectNewsStream()
 
     // Cleanup on unmount
     return () => {
-      eventSource.close()
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close()
+      }
     }
   }, [backendUrl])
 
