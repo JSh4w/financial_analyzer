@@ -5,7 +5,6 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from logging import getLogger
 from typing import Dict, List
-from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -24,10 +23,12 @@ from app.database.news_data_manager import NewsDataManager
 from app.database.connection import DuckDBConnection
 from core.logging import setup_logging
 
+#API routes
+from app.routes.t212 import t212_router 
+
 
 setup_logging(level="DEBUG")
 logger = getLogger(__name__)
-load_dotenv()
 
 settings = Settings()
 
@@ -277,7 +278,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-#app.include_router(subscription_router)
+app.include_router(t212_router)
 
 # Dependency injection functions
 def get_ws_manager():
