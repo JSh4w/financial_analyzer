@@ -31,3 +31,6 @@ class Settings(BaseSettings):
     SUPABSE_JWT_SECRET : str = "secret"
     MODAL_TOKEN_ID : str = "demo"
     MODAL_TOKEN_SECRET : str = "demo"
+    T212_KEY_ID : str = "demo"
+    T212_SECRET_KEY : str = "demo"
+    
