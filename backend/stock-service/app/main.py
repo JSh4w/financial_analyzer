@@ -9,19 +9,22 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
-from app.config import Settings
-from app.utils import time_function
-from app.stocks.websocket_manager import WebSocketManager
-from app.stocks.data_aggregator import TradeDataAggregator
-from app.stocks.historical_data import AlpacaHistoricalData
-from app.stocks.subscription_manager import SubscriptionManager
-from app.database.stock_data_manager import StockDataManager
+from app.config import Settings #Configuration settings
+from app.utils import time_function # Timing a function request
+from app.stocks.websocket_manager import WebSocketManager # Sets up initial connection
+from app.stocks.data_aggregator import TradeDataAggregator # Creates candlesticks
+from app.stocks.historical_data import AlpacaHistoricalData # Requests historical data 
+from app.stocks.subscription_manager import SubscriptionManager # For users to interact with websocket
+from app.database.stock_data_manager import StockDataManager # For DB access of candles / long term
 
-from app.stocks.news_websocket import NewsWebsocket
-from app.database.news_data_manager import NewsDataManager
+from app.stocks.news_websocket import NewsWebsocket # Initial news websocket 
+from app.database.news_data_manager import NewsDataManager # Handles user subsriptions and SSE
 
 from app.database.connection import DuckDBConnection
 from core.logging import setup_logging
+
+# AUthentication 
+from app.auth import get_current_user, get_current_user_id, get_optional_user, TokenPayload
 
 #API routes
 from app.routes.t212 import t212_router 
@@ -311,7 +314,10 @@ def health_check():
     return {"status": "healthy", "service": "stock-service", "environment": "production"}
 
 @app.get("/ws_manager/status")
-async def status(ws_manager: WebSocketManager = Depends(get_ws_manager)):
+async def status(
+    ws_manager: WebSocketManager = Depends(get_ws_manager),
+    _: str = Depends(get_current_user_id)
+):
     """Check status of ws_manager"""
     output = await ws_manager.log_current_status()
     return {"message":f"{output}"}
@@ -320,7 +326,8 @@ async def status(ws_manager: WebSocketManager = Depends(get_ws_manager)):
 async def subscribe_to_symbol(
     symbol: str,
     subscription_manager: SubscriptionManager = Depends(get_subscription_manager),
-    demo_subscription_manager: SubscriptionManager = Depends(get_demo_subscription_manager)
+    demo_subscription_manager: SubscriptionManager = Depends(get_demo_subscription_manager),
+    user_id: str = Depends(get_current_user_id)
 ):
     """Subscribe to symbol stock data via SubscriptionManager"""
     # Use demo manager for FAKEPACA, otherwise use production manager
@@ -331,10 +338,18 @@ async def subscribe_to_symbol(
 
     try:
         # SubscriptionManager orchestrates: StockHandler creation + WebSocket subscription
-        success = await manager.add_user_subscription(user_id=123, symbol=symbol, subscription_type='trades')
+        success = await manager.add_user_subscription(
+            user_id=user_id,
+            symbol=symbol,
+            subscription_type='trades'
+            )
 
         if success:
-            return {"message": "Subscribed to symbol successfully", "status": "subscribed", "symbol": symbol}
+            return {
+                "message": "Subscribed to symbol successfully",
+                "status": "subscribed",
+                "symbol": symbol
+                }
 
         return {"message": f"Failed to subscribe to {symbol}", "status": "error"}
     except Exception as e:
@@ -345,7 +360,8 @@ async def subscribe_to_symbol(
 async def unsubscribe_to_symbol(
     symbol: str,
     subscription_manager: SubscriptionManager = Depends(get_subscription_manager),
-    demo_subscription_manager: SubscriptionManager = Depends(get_demo_subscription_manager)
+    demo_subscription_manager: SubscriptionManager = Depends(get_demo_subscription_manager),
+    user_id: str = Depends(get_current_user_id)
 ):
     """Unsubscribe from symbol stock data via SubscriptionManager"""
     # Use demo manager for FAKEPACA, otherwise use production manager
@@ -355,7 +371,7 @@ async def unsubscribe_to_symbol(
         return {"message": "Subscription manager is not running", "status": "not_running"}
 
     try:
-        success = await manager.remove_user_subscription(user_id=123, symbol=symbol, subscription_type='trades')
+        success = await manager.remove_user_subscription(user_id=user_id, symbol=symbol, subscription_type='trades')
 
         if success:
             return {
@@ -372,7 +388,8 @@ async def unsubscribe_to_symbol(
 # Data Aggregator Endpoints
 @app.get("/aggregator/status")
 async def get_aggregator_status(
-    data_aggregator: TradeDataAggregator = Depends(get_data_aggregator)
+    data_aggregator: TradeDataAggregator = Depends(get_data_aggregator),
+    _: str = Depends(get_current_user_id)
 ):
     """Get status of the data aggregator"""
     if data_aggregator is None:
@@ -386,7 +403,8 @@ async def get_aggregator_status(
 
 @app.get("/aggregator/symbols")
 async def get_tracked_symbols(
-    data_aggregator: TradeDataAggregator = Depends(get_data_aggregator)
+    data_aggregator: TradeDataAggregator = Depends(get_data_aggregator),
+    _: str = Depends(get_current_user_id)
 ):
     """Get all symbols being tracked by the aggregator"""
     if data_aggregator is None:
@@ -397,7 +415,8 @@ async def get_tracked_symbols(
 @app.get("/aggregator/data/{symbol}")
 async def get_symbol_data(
     symbol: str,
-    data_aggregator: TradeDataAggregator = Depends(get_data_aggregator)
+    data_aggregator: TradeDataAggregator = Depends(get_data_aggregator),
+    _: str= Depends(get_current_user_id)
 ):
     """Get OHLCV data for a specific symbol"""
     if data_aggregator is None:
@@ -414,7 +433,8 @@ async def get_symbol_data(
 
 @app.get("/aggregator/data")
 async def get_all_aggregated_data(
-    data_aggregator: TradeDataAggregator = Depends(get_data_aggregator)
+    data_aggregator: TradeDataAggregator = Depends(get_data_aggregator),
+    _: str = Depends(get_current_user_id)
 ):
     """Get OHLCV data for all tracked symbols"""
     if data_aggregator is None:
@@ -432,9 +452,15 @@ async def get_all_aggregated_data(
 @app.get("/stream/{symbol}")
 async def stream_stock_data(
     symbol: str,
+    token: str,
     data_aggregator: TradeDataAggregator = Depends(get_data_aggregator)
 ):
     """Stream real-time OHLCV data for a symbol via SSE"""
+    # Validate token from query parameter (EventSource doesn't support headers)
+    from app.auth import decode_jwt_token
+    user = decode_jwt_token(token)
+    user_id = user.sub
+
     symbol = symbol.upper()
 
     # Check if data aggregator is running
@@ -489,7 +515,8 @@ async def stream_stock_data(
 # Database Management Endpoints
 @app.get("/database/stats")
 async def get_database_stats(
-    db_manager: StockDataManager = Depends(get_db_manager)
+    db_manager: StockDataManager = Depends(get_db_manager),
+    _: str = Depends(get_current_user_id)
 ):
     """Get database statistics for all symbols"""
     if db_manager is None:
@@ -516,7 +543,8 @@ async def get_database_stats(
 @app.get("/database/export/{symbol}")
 async def export_symbol_data(
     symbol: str,
-    db_manager: StockDataManager = Depends(get_db_manager)
+    db_manager: StockDataManager = Depends(get_db_manager),
+    _: str = Depends(get_current_user_id)
 ):
     """Export symbol data to parquet file"""
     if db_manager is None:
@@ -534,7 +562,8 @@ async def export_symbol_data(
 @app.get("/database/candle_count/{symbol}")
 async def get_candle_count(
     symbol: str,
-    db_manager: StockDataManager = Depends(get_db_manager)
+    db_manager: StockDataManager = Depends(get_db_manager),
+    _: str = Depends(get_current_user_id)
 ):
     """Get candle count for a specific symbol"""
     if db_manager is None:
@@ -585,7 +614,8 @@ async def tradingview_history(
     from_ts: int,
     to_ts: int,
     resolution: str = "1",  # noqa: ARG001 - Reserved for future multi-resolution support
-    db_manager: StockDataManager = Depends(get_db_manager)
+    db_manager: StockDataManager = Depends(get_db_manager),
+    _: str = Depends(get_current_user_id)
 ):
     """Get historical bars for TradingView
 
@@ -652,8 +682,13 @@ async def tradingview_history(
 
 
 @app.get("/news/stream")
-async def stream_news_data():
+async def stream_news_data(token: str):
     """Stream news data via SSE"""
+    # Validate token from query parameter (EventSource doesn't support headers)
+    from app.auth import decode_jwt_token
+    user = decode_jwt_token(token)
+    user_id = user.sub
+
     n_queue = asyncio.Queue(maxsize=10)
     add_news_connection(n_queue)
 

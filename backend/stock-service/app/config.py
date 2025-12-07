@@ -28,7 +28,8 @@ class Settings(BaseSettings):
     ALPACA_API_SECRET : str = "demo_secret"
     SUPABASE_URL : str = "url"
     SUPABASE_KEY : str = "key"
-    SUPABSE_JWT_SECRET : str = "secret"
+    SUPABASE_JWT_SECRET : str = "secret"  # Legacy HS256 secret (deprecated)
+    SUPABASE_JWKS_URL : str = ""  # RS256 JWKS endpoint (recommended): https://<project-id>.supabase.co/auth/v1/.well-known/jwks.json
     MODAL_TOKEN_ID : str = "demo"
     MODAL_TOKEN_SECRET : str = "demo"
     T212_KEY_ID : str = "demo"

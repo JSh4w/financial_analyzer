@@ -27,3 +27,6 @@ frontend_src_migrate/
 inspiration/
 
 *.duckdb
+
+# Optionally hidden files
+_hidden*
