@@ -3,7 +3,7 @@
  * Connects TradingView charts to our Alpaca backend data
  */
 
-const BACKEND_URL = 'http://localhost:8001';
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 
 interface Bar {
   time: number; // Unix timestamp in milliseconds

@@ -34,4 +34,5 @@ class Settings(BaseSettings):
     MODAL_TOKEN_SECRET : str = "demo"
     T212_KEY_ID : str = "demo"
     T212_SECRET_KEY : str = "demo"
-    
+    GO_CARDLESS_SECRET_KEY : str = "demo"
+    GO_CARDLESS_SECRET_ID : str = "demo"

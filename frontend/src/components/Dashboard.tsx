@@ -5,6 +5,7 @@ import NewsFeed from './NewsFeed'
 import { supabase } from '../lib/supabase'
 import { apiClient } from '../lib/api-client'
 import { getAuthToken } from '../lib/auth'
+import SelectBank from './SelectBank'
 
 interface StockData {
   symbol: string
@@ -596,6 +597,7 @@ export default function Dashboard() {
                 <p style={{ fontSize: '16px', color: '#666' }}>
                   Your portfolio view is coming soon. Track your investments, performance, and more.
                 </p>
+                <SelectBank onSelect={(inst) => console.log('Selected bank:', inst)} /> 
               </div>
             ) : activeStocks.size === 0 ? (
               <div style={{

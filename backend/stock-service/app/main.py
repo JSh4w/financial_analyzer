@@ -28,7 +28,10 @@ from app.auth import get_current_user, get_current_user_id, get_optional_user, T
 
 #API routes
 from app.routes.t212 import t212_router 
+from app.routes.banking import banking_router
 
+#banking class
+from app.services.gocardless import GoCardlessClient
 
 setup_logging(level="DEBUG")
 logger = getLogger(__name__)
@@ -234,6 +237,10 @@ async def lifespan(app: FastAPI):
 
     app.state.news_broadcast_task = asyncio.create_task(broadcast_news(news_queue))
 
+    app.state.banking_client = GoCardlessClient(
+        secret_id=settings.GO_CARDLESS_SECRET_ID,
+        secret_key=settings.GO_CARDLESS_SECRET_KEY
+    )
 
     yield  # App runs here
 
@@ -282,6 +289,7 @@ app.add_middleware(
 )
 
 app.include_router(t212_router)
+app.include_router(banking_router)
 
 # Dependency injection functions
 def get_ws_manager():

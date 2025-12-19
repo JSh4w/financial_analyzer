@@ -1,6 +1,13 @@
  
 # Todo 
 
+## Security
+Store trading212 api 
+Use IBKR  
+add bak account information
+add extra t212 information
+
+
 ## Stock service
 1. Setup frontend for viewing candlestick data:
  - echarts for viewing 
@@ -18,17 +25,6 @@
 9. Allow user based views - so all storage should be general but all frontend requests should use user ID / JWLP ???
 10. Test pushing some data to supabase POSTGRESQL/ custom SQL command 
 11. News analysis entirely in modal -> request api then use finBert for processing 
-
-#### Subscription flow
-Websocket (yes/no based on subscriber count)
-Subscriptiopn Handler (number of subscriptions based on users
-\+ send request to subscribe or unsubscribe to Websocket 
-This is my single source of truth). Frontend requests updates to the subscription handler and processes the system stat
-- Key parts of the system 
-1. UserID
-2. UserSubscriptions
-3. Name
-4. UserPassword/ credentials
 
 
 ## Net Worth Calculator

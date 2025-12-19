@@ -14,7 +14,7 @@ t212_router = APIRouter()
 
 @t212_router.get("/T212")
 def get_t212_data(
-    _ : str = Depends(get_current_user_id)
+    #_ : str = Depends(get_current_user_id)
     ):
     """
         Provides user T212 data based on user_id 
