@@ -38,6 +38,3 @@ class IntradayStockData(BaseModel):
     low: float
     close: float
     volume: int
-
-# https://www.alphavantage.co/documentation/
-# Use the above link to get stock_schema 

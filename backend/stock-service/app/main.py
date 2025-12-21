@@ -32,6 +32,7 @@ from app.routes.banking import banking_router
 
 #banking class
 from app.services.gocardless import GoCardlessClient
+from app.database.external_database_manager import DatabaseManager
 
 setup_logging(level="DEBUG")
 logger = getLogger(__name__)
@@ -241,6 +242,11 @@ async def lifespan(app: FastAPI):
         secret_id=settings.GO_CARDLESS_SECRET_ID,
         secret_key=settings.GO_CARDLESS_SECRET_KEY
     )
+
+    # Initialize Supabase database manager for user data and banking requisitions
+    app.state.supabase_db = DatabaseManager()
+    app.state.supabase_db.connect()
+    logger.info("Supabase DatabaseManager initialized")
 
     yield  # App runs here
 

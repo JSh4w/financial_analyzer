@@ -98,33 +98,30 @@ class GoCardlessClient:
         return []
             
 
-    async def create_requisition(self, redirect_uri: str, institution_id: str) -> str:
-        """Returns authorization link for user."""
+    async def create_requisition(self, redirect_uri: str, institution_id: str, user_id: str | None = None) -> dict:
+        """Creates a requisition and returns the authorization link and requisition ID."""
         token = await self.get_token()
         async with httpx.AsyncClient() as client:
-            response = await client.get(
+            response = await client.post(
                 "https://bankaccountdata.gocardless.com/api/v2/requisitions/",
-
                 headers={
                     "accept": "application/json",
                     "Content-Type": "application/json",
                     "Authorization": f"Bearer {token}",
                 },
-
                 json={
                     "redirect": redirect_uri,
                     "institution_id": institution_id,
-                    "reference": "124151",
-                    "agreement": "2dea1b84-97b0-4cb4-8805-302c227587c8",
+                    "reference": user_id or "user_ref",
                     "user_language": "EN",
                 }
             )
             response.raise_for_status()
             data = response.json()
-            data["id"] # requisition ID , we want to store this securely for latter access
-            # supabase.store(id) !!!!!!
-            data["link"] # URL to redirect user to
-            return data["link"]
+            return {
+                "requisition_id": data["id"],
+                "link": data["link"]
+            }
 
 
     async def get_balance(self, account_id: str) -> Decimal:

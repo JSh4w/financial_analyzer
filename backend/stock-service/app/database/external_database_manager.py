@@ -66,6 +66,24 @@ class DatabaseManager:
             logger.error("Failed to create user profile: %s", e)
             return None
 
+    def get_user_profile(self, user_id: str):
+        """Get user profile by user_id"""
+        try:
+            result = self.client.table("user_profiles").select("*").eq("id", user_id).single().execute()
+            return result.data
+        except Exception as e:
+            logger.error("Failed to get user profile: %s", e)
+            return None
+
+    def update_user_profile(self, user_id: str, updates: dict):
+        """Update user profile"""
+        try:
+            result = self.client.table("user_profiles").update(updates).eq("id", user_id).execute()
+            return result.data
+        except Exception as e:
+            logger.error("Failed to update user profile: %s", e)
+            return None
+
     def update_watchlist(self, user_id: str, watchlist: list):
         """Update user watchlist"""
         try:
@@ -73,4 +91,30 @@ class DatabaseManager:
             return result.data
         except Exception as e:
             logger.error("Failed to update watchlist: %s", e)
+            return None
+
+    def store_bank_requisition(self, user_id: str, requisition_id: str, institution_id: str):
+        """Store GoCardless requisition for a user"""
+        try:
+            data = {
+                "user_id": user_id,
+                "requisition_id": requisition_id,
+                "institution_id": institution_id,
+                "status": "pending",
+                "created_at": "now()"
+            }
+            result = self.client.table("bank_requisitions").insert(data).execute()
+            logger.info("Requisition stored: %s", requisition_id)
+            return result.data
+        except Exception as e:
+            logger.error("Failed to store requisition: %s", e)
+            return None
+
+    def get_user_requisitions(self, user_id: str):
+        """Get all bank requisitions for a user"""
+        try:
+            result = self.client.table("bank_requisitions").select("*").eq("user_id", user_id).execute()
+            return result.data
+        except Exception as e:
+            logger.error("Failed to get requisitions: %s", e)
             return None
