@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { BankClientDatafeed } from '../services/bankclient-datafeed'
+import { getAuthToken } from '../lib/auth'
 
 interface Institution {
   id: string
@@ -16,6 +17,7 @@ export default function SelectBank({ onSelect }: { onSelect?: (inst: Institution
   const [institutions, setInstitutions] = useState<Institution[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [connecting, setConnecting] = useState(false)
 
   useEffect(() => {
     const load = async () => {
@@ -40,6 +42,29 @@ export default function SelectBank({ onSelect }: { onSelect?: (inst: Institution
       .sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }))
   }, [institutions])
 
+  const handleBankClick = async (inst: Institution) => {
+    setConnecting(true)
+    setError(null)
+    try {
+      // Get auth token
+      const token = await getAuthToken()
+      if (!token) {
+        throw new Error('Please sign in to connect your bank')
+      }
+
+      // Create requisition
+      const df = new BankClientDatafeed()
+      const redirectUri = `${window.location.origin}/portfolio`
+      const result = await df.createRequisition(inst.id, redirectUri, token)
+
+      // Redirect to GoCardless auth page
+      window.location.href = result.link
+    } catch (err: any) {
+      setError(String(err.message || err))
+      setConnecting(false)
+    }
+  }
+
   return (
     <div style={{ padding: 16 }}>
       <h3 style={{ margin: '0 0 8px 0' }}>Select your bank</h3>
@@ -53,14 +78,16 @@ export default function SelectBank({ onSelect }: { onSelect?: (inst: Institution
       </div>
 
       {loading && <div>Loading banks…</div>}
-      {error && <div style={{ color: 'red' }}>Error loading banks: {error}</div>}
+      {connecting && <div style={{ color: '#007bff' }}>Connecting to bank...</div>}
+      {error && <div style={{ color: 'red' }}>Error: {error}</div>}
 
       {!loading && !error && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 12 }}>
           {institutionsSorted.map((inst) => (
             <button
               key={inst.id}
-              onClick={() => onSelect?.(inst)}
+              onClick={() => handleBankClick(inst)}
+              disabled={connecting}
               style={{
                 display: 'flex',
                 alignItems: 'center',

@@ -16,4 +16,28 @@ export class BankClientDatafeed {
     return []
   }
 
+  /**
+   * Creates a requisition and returns the GoCardless authentication link
+   */
+  async createRequisition(institutionId: string, redirectUri: string, token: string) {
+    const response = await fetch(
+      `${BACKEND_URL}/banking/requisition?redirect_uri=${encodeURIComponent(redirectUri)}&institution_id=${encodeURIComponent(institutionId)}`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Failed to create requisition: ${error}`);
+    }
+
+    const data = await response.json();
+    return data; // { link: string, requisition_id: string }
+  }
+
 }

@@ -38,9 +38,36 @@ export default function Dashboard() {
   const [selectedStock, setSelectedStock] = useState<string | null>(null)
   const [currentView, setCurrentView] = useState<View>('stocks')
   const [globalStatus, setGlobalStatus] = useState('')
+  const [bankConnectionStatus, setBankConnectionStatus] = useState<'idle' | 'success' | 'error'>('idle')
+  const [bankConnectionMessage, setBankConnectionMessage] = useState('')
   const eventSourcesRef = useRef<Map<string, EventSource>>(new Map())
 
   const BACKEND_URL = 'http://localhost:8001'
+
+  // Handle GoCardless callback
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const ref = params.get('ref')
+    const error = params.get('error')
+
+    if (error) {
+      setBankConnectionStatus('error')
+      setBankConnectionMessage(`Bank connection failed: ${error}`)
+      setCurrentView('portfolio')
+      // Clean up URL
+      window.history.replaceState({}, '', '/portfolio')
+    } else if (ref) {
+      setBankConnectionStatus('success')
+      setBankConnectionMessage('Bank connected successfully! You can now access your account data.')
+      setCurrentView('portfolio')
+      // Clean up URL
+      window.history.replaceState({}, '', '/portfolio')
+      // Auto-dismiss after 10 seconds
+      setTimeout(() => {
+        setBankConnectionStatus('idle')
+      }, 10000)
+    }
+  }, [])
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
@@ -597,7 +624,34 @@ export default function Dashboard() {
                 <p style={{ fontSize: '16px', color: '#666' }}>
                   Your portfolio view is coming soon. Track your investments, performance, and more.
                 </p>
-                <SelectBank onSelect={(inst) => console.log('Selected bank:', inst)} /> 
+
+                {bankConnectionStatus === 'success' && (
+                  <div style={{
+                    backgroundColor: '#10b981',
+                    color: 'white',
+                    padding: '16px',
+                    borderRadius: '8px',
+                    marginBottom: '24px',
+                    fontSize: '14px'
+                  }}>
+                    ✓ {bankConnectionMessage}
+                  </div>
+                )}
+
+                {bankConnectionStatus === 'error' && (
+                  <div style={{
+                    backgroundColor: '#ef4444',
+                    color: 'white',
+                    padding: '16px',
+                    borderRadius: '8px',
+                    marginBottom: '24px',
+                    fontSize: '14px'
+                  }}>
+                    ✗ {bankConnectionMessage}
+                  </div>
+                )}
+
+                <SelectBank onSelect={(inst) => console.log('Selected bank:', inst)} />
               </div>
             ) : activeStocks.size === 0 ? (
               <div style={{
