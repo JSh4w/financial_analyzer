@@ -1,8 +1,9 @@
 """Banking routes for GoCardless integration"""
-from fastapi import APIRouter, Request, Depends
+from fastapi import APIRouter, Request, Depends, HTTPException
 from app.services.gocardless import GoCardlessClient
 from app.auth import get_current_user_id
 from app.database.external_database_manager import DatabaseManager
+import httpx
 
 banking_router = APIRouter(prefix="/banking")
 
@@ -55,22 +56,33 @@ async def requisition(
     client: GoCardlessClient = request.app.state.banking_client
     db: DatabaseManager = request.app.state.supabase_db
 
-    # Create requisition with GoCardless
-    result = await client.create_requisition(redirect_uri, institution_id, user_id)
-    requisition_id = result["requisition_id"]
-    auth_link = result["link"]
+    try:
+        # Create requisition with GoCardless
+        result = await client.create_requisition(redirect_uri, institution_id, user_id)
+        requisition_id = result["requisition_id"]
+        auth_link = result["link"]
 
-    # Store requisition in database
-    db.store_bank_requisition(
-        user_id=user_id,
-        requisition_id=requisition_id,
-        institution_id=institution_id
-    )
+        # Store requisition in database
+        db.store_bank_requisition(
+            user_id=user_id,
+            requisition_id=requisition_id,
+            institution_id=institution_id,
+            reference=result["reference"]
+        )
 
-    return {
-        "link": auth_link,
-        "requisition_id": requisition_id
-    }
+        return {
+            "link": auth_link,
+            "requisition_id": requisition_id
+        }
+    except httpx.HTTPStatusError as e:
+        # Extract error details from the response
+        error_detail = str(e)
+        status_code = e.response.status_code if e.response else 500
+
+        raise HTTPException(
+            status_code=status_code,
+            detail=f"Failed to create bank requisition: {error_detail}"
+        )
 # @router.get("/balance")
 # async def get_balance(request: Request):
 #     client = request.app.state.gocardless

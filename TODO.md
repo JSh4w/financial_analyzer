@@ -29,8 +29,9 @@ add extra t212 information
 
 ## Net Worth Calculator
 1. Gocardless API for banks
-    1. Accessing API
-    2. Setting up READ only api keys 
+    1. Storing correct information
+    2. Retrieve all stored information to view current account ammounts
+    3. Store user profiles on login!!!!
 2. API for T212
     1. Read only API key from user
     2. User prompt 

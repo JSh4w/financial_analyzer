@@ -2,6 +2,7 @@
 from datetime import datetime, timedelta
 from decimal import Decimal
 import httpx
+import uuid
 
 class GoCardlessClient:
     """
@@ -101,6 +102,7 @@ class GoCardlessClient:
     async def create_requisition(self, redirect_uri: str, institution_id: str, user_id: str | None = None) -> dict:
         """Creates a requisition and returns the authorization link and requisition ID."""
         token = await self.get_token()
+        reference = str(uuid.uuid4())
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 "https://bankaccountdata.gocardless.com/api/v2/requisitions/",
@@ -112,15 +114,29 @@ class GoCardlessClient:
                 json={
                     "redirect": redirect_uri,
                     "institution_id": institution_id,
-                    "reference": user_id or "user_ref",
+                    "reference": reference or user_id or "anonymous",
                     "user_language": "EN",
                 }
             )
-            response.raise_for_status()
+
+            if response.status_code != 201:
+                error_detail = response.text
+                try:
+                    error_data = response.json()
+                    error_detail = error_data
+                except:
+                    pass
+                raise httpx.HTTPStatusError(
+                    f"GoCardless API error: {error_detail}",
+                    request=response.request,
+                    response=response
+                )
+
             data = response.json()
             return {
                 "requisition_id": data["id"],
-                "link": data["link"]
+                "link": data["link"],
+                "reference": reference
             }
 
 
