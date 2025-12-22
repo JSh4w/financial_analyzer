@@ -1,5 +1,5 @@
 -- Migration: Create bank_requisitions table
--- Created: 2025-01-21
+-- Created: 2025-01-22
 -- Description: Stores GoCardless banking requisitions for users
 
 -- Create bank_requisitions table
@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS bank_requisitions (
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   requisition_id TEXT NOT NULL UNIQUE,
   institution_id TEXT NOT NULL,
+  reference TEXT,
   status TEXT DEFAULT 'pending',
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()

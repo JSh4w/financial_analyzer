@@ -93,13 +93,14 @@ class DatabaseManager:
             logger.error("Failed to update watchlist: %s", e)
             return None
 
-    def store_bank_requisition(self, user_id: str, requisition_id: str, institution_id: str):
+    def store_bank_requisition(self, user_id: str, requisition_id: str, institution_id: str, reference: str):
         """Store GoCardless requisition for a user"""
         try:
             data = {
                 "user_id": user_id,
                 "requisition_id": requisition_id,
                 "institution_id": institution_id,
+                "reference": reference,
                 "status": "pending",
                 "created_at": "now()"
             }
