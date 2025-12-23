@@ -5,29 +5,30 @@ from app.auth import get_current_user_id
 from app.database.external_database_manager import DatabaseManager
 import httpx
 
+from app.dependencies import (
+    get_db_manager,
+    get_banking_client
+)
+
 banking_router = APIRouter(prefix="/banking")
 
 @banking_router.post("/link")
-async def link_bank(request: Request):
-    client: GoCardlessClient = request.app.state.banking_client
+async def link_bank(client : GoCardlessClient = Depends(get_banking_client)):
     url = await client.create_requisition(...)
     return {"url": url}
 
 @banking_router.get("/get_token")
-async def get_token(request: Request):
-    client: GoCardlessClient = request.app.state.banking_client
+async def get_token(client: GoCardlessClient = Depends(get_banking_client)):
     token = await client.get_token()
     return {"token": token}
 
 
 @banking_router.get("/me")
 async def get_current_user_info(
-    request: Request,
-    user_id: str = Depends(get_current_user_id)
+    user_id: str = Depends(get_current_user_id),
+    db : DatabaseManager = Depends(get_db_manager)
 ):
     """Test endpoint to verify user_id extraction from JWT token"""
-    db: DatabaseManager = request.app.state.supabase_db
-
     # Try to get user profile
     profile = db.get_user_profile(user_id)
 
@@ -38,9 +39,8 @@ async def get_current_user_info(
     }
 
 @banking_router.get("/institutions")
-async def list_institutions(request: Request):
+async def list_institutions(client: GoCardlessClient = Depends(get_banking_client)):
     """Get list of available banking institutions"""
-    client: GoCardlessClient = request.app.state.banking_client
     institutions = await client.get_institutions()
     # Return the complete list of institutions as provided by the client
     return {"institutions": institutions}
@@ -50,12 +50,11 @@ async def requisition(
     request: Request,
     redirect_uri: str,
     institution_id: str,
-    user_id: str = Depends(get_current_user_id)
+    user_id: str = Depends(get_current_user_id),
+    client: GoCardlessClient = Depends(get_banking_client),
+    db: DatabaseManager = Depends(get_db_manager),
 ):
     """Create a GoCardless requisition and return the authentication link."""
-    client: GoCardlessClient = request.app.state.banking_client
-    db: DatabaseManager = request.app.state.supabase_db
-
     try:
         # Create requisition with GoCardless
         result = await client.create_requisition(redirect_uri, institution_id, user_id)

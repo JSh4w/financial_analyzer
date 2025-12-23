@@ -1,10 +1,11 @@
 """Main backend application using FastAPI for stock analysis"""
 import json
 import asyncio
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from logging import getLogger
-from typing import Dict, List
+from typing import Dict, List, TypedDict
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -13,31 +14,58 @@ from app.config import Settings #Configuration settings
 from app.utils import time_function # Timing a function request
 from app.stocks.websocket_manager import WebSocketManager # Sets up initial connection
 from app.stocks.data_aggregator import TradeDataAggregator # Creates candlesticks
-from app.stocks.historical_data import AlpacaHistoricalData # Requests historical data 
+from app.stocks.historical_data import AlpacaHistoricalData # Requests historical data
 from app.stocks.subscription_manager import SubscriptionManager # For users to interact with websocket
 from app.database.stock_data_manager import StockDataManager # For DB access of candles / long term
 
-from app.stocks.news_websocket import NewsWebsocket # Initial news websocket 
+from app.stocks.news_websocket import NewsWebsocket # Initial news websocket
 from app.database.news_data_manager import NewsDataManager # Handles user subsriptions and SSE
 
 from app.database.connection import DuckDBConnection
 from core.logging import setup_logging
 
-# AUthentication 
+# AUthentication
 from app.auth import get_current_user, get_current_user_id, get_optional_user, TokenPayload
 
 #API routes
-from app.routes.t212 import t212_router 
+from app.routes.t212 import t212_router
 from app.routes.banking import banking_router
 
 #banking class
 from app.services.gocardless import GoCardlessClient
 from app.database.external_database_manager import DatabaseManager
 
+# Dependency functions
+from app.dependencies import (
+    get_ws_manager,
+    get_subscription_manager,
+    get_demo_subscription_manager,
+    get_data_aggregator,
+    get_db_manager
+)
+
 setup_logging(level="DEBUG")
 logger = getLogger(__name__)
 
 settings = Settings()
+
+
+# Define typed application state
+class State(TypedDict):
+    """Application state with type definitions"""
+    db_manager: StockDataManager
+    data_aggregator: TradeDataAggregator
+    ws_manager: WebSocketManager
+    demo_ws_manager: WebSocketManager
+    subscription_manager: SubscriptionManager
+    demo_subscription_manager: SubscriptionManager
+    news_queue: asyncio.Queue
+    news_db_manager: NewsDataManager
+    news_ws: NewsWebsocket
+    news_broadcast_task: asyncio.Task
+    banking_client: GoCardlessClient
+    supabase_db: DatabaseManager
+
 
 # SSE connection management
 active_sse_connections: Dict[str, List[asyncio.Queue]] = {}
@@ -166,14 +194,14 @@ async def connect_to_websocket(
         raise e
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncIterator[State]:
     """FastAPI lifespan manager - startup and shutdown events"""
     # STARTUP: Initialize components when app starts
     logger.info("Starting application components...")
 
     # Initialize database manager
     db_connection = DuckDBConnection("data/stock_data.duckdb")
-    app.state.db_manager = StockDataManager(db_connection=db_connection)
+    db_manager = StockDataManager(db_connection=db_connection)
 
     # Websocket queue, max number of stocks
     shared_queue = asyncio.Queue(500)
@@ -185,99 +213,100 @@ async def lifespan(app: FastAPI):
     )
 
     # Initialize data aggregator with all components
-    app.state.data_aggregator = TradeDataAggregator(
+    data_aggregator = TradeDataAggregator(
         input_queue=shared_queue,
         broadcast_callback=broadcast_update,
-        db_manager=app.state.db_manager,
+        db_manager=db_manager,
         historical_fetcher=historical_fetcher
     )
 
     # Start processing task
-    asyncio.create_task(app.state.data_aggregator.process_tick_queue())
+    asyncio.create_task(data_aggregator.process_tick_queue())
 
     # Initialize WebSocket manager with the shared queue
     # "wss://stream.data.alpaca.markets/v2/test for FAKEPACA
     # "wss://stream.data.alpaca.markets/v2/iex"
-    app.state.ws_manager = await connect_to_websocket(
+    ws_manager = await connect_to_websocket(
         websocket = WebSocketManager,
         uri="wss://stream.data.alpaca.markets/v2/iex",
         output_queue=shared_queue
         )
-    app.state.demo_ws_manager = await connect_to_websocket(
+    demo_ws_manager = await connect_to_websocket(
         websocket = WebSocketManager,
         uri="wss://stream.data.alpaca.markets/v2/test",
         output_queue=shared_queue
         )
 
     # Initialize SubscriptionManager (source of truth for subscriptions)
-    app.state.subscription_manager = SubscriptionManager(
-        subscribe_callback=app.state.ws_manager.subscribe,
-        unsubscribe_callback=app.state.ws_manager.unsubscribe,
-        on_handler_create_callback=app.state.data_aggregator.ensure_handler_exists
+    subscription_manager = SubscriptionManager(
+        subscribe_callback=ws_manager.subscribe,
+        unsubscribe_callback=ws_manager.unsubscribe,
+        on_handler_create_callback=data_aggregator.ensure_handler_exists
     )
 
-    app.state.demo_subscription_manager = SubscriptionManager(
-        subscribe_callback=app.state.demo_ws_manager.subscribe,
-        unsubscribe_callback=app.state.demo_ws_manager.unsubscribe,
-        on_handler_create_callback=app.state.data_aggregator.ensure_handler_exists
+    demo_subscription_manager = SubscriptionManager(
+        subscribe_callback=demo_ws_manager.subscribe,
+        unsubscribe_callback=demo_ws_manager.unsubscribe,
+        on_handler_create_callback=data_aggregator.ensure_handler_exists
     )
 
     logger.info("SubscriptionManager initialized and wired")
 
-
     # Handle news
     news_queue = asyncio.Queue(500)
-    app.state.news_queue = news_queue
-
-    app.state.news_db_manager = NewsDataManager(db_connection=db_connection)
-    app.state.news_ws = await connect_to_websocket(
+    news_db_manager = NewsDataManager(db_connection=db_connection)
+    news_ws = await connect_to_websocket(
         websocket = NewsWebsocket,
         uri = "wss://stream.data.alpaca.markets/v1beta1/news",
         output_queue=news_queue
         )
 
-    app.state.news_broadcast_task = asyncio.create_task(broadcast_news(news_queue))
+    news_broadcast_task = asyncio.create_task(broadcast_news(news_queue))
 
-    app.state.banking_client = GoCardlessClient(
+    banking_client = GoCardlessClient(
         secret_id=settings.GO_CARDLESS_SECRET_ID,
         secret_key=settings.GO_CARDLESS_SECRET_KEY
     )
 
     # Initialize Supabase database manager for user data and banking requisitions
-    app.state.supabase_db = DatabaseManager()
-    app.state.supabase_db.connect()
+    supabase_db = DatabaseManager()
+    supabase_db.connect()
     logger.info("Supabase DatabaseManager initialized")
 
-    yield  # App runs here
+    # Yield state to FastAPI - this makes it available via request.state
+    yield {
+        "db_manager": db_manager,
+        "data_aggregator": data_aggregator,
+        "ws_manager": ws_manager,
+        "demo_ws_manager": demo_ws_manager,
+        "subscription_manager": subscription_manager,
+        "demo_subscription_manager": demo_subscription_manager,
+        "news_queue": news_queue,
+        "news_db_manager": news_db_manager,
+        "news_ws": news_ws,
+        "news_broadcast_task": news_broadcast_task,
+        "banking_client": banking_client,
+        "supabase_db": supabase_db,
+    }
 
     # SHUTDOWN: Clean up when app stops
     logger.info("Shutting down application components...")
 
-    if hasattr(app.state, 'data_aggregator'):
-        await app.state.data_aggregator.shutdown()
-
-    if hasattr(app.state, 'ws_manager'):
-        await app.state.ws_manager.stop()
-
-    if hasattr(app.state, 'demo_ws_manager'):
-        await app.state.demo_ws_manager.stop()
-
-    if hasattr(app.state, 'news_ws'):
-        await app.state.news_ws.stop()
+    await data_aggregator.shutdown()
+    await ws_manager.stop()
+    await demo_ws_manager.stop()
+    await news_ws.stop()
 
     # Stop news broadcast task
-    if hasattr(app.state, 'news_queue'):
-        await app.state.news_queue.put(None)  # Sentinel to stop broadcast loop
-    if hasattr(app.state, 'news_broadcast_task'):
-        app.state.news_broadcast_task.cancel()
-        try:
-            await app.state.news_broadcast_task
-        except asyncio.CancelledError:
-            pass
-        logger.info("News broadcast task stopped")
+    await news_queue.put(None)  # Sentinel to stop broadcast loop
+    news_broadcast_task.cancel()
+    try:
+        await news_broadcast_task
+    except asyncio.CancelledError:
+        pass
+    logger.info("News broadcast task stopped")
 
-    if hasattr(app.state, 'db_manager'):
-        app.state.db_manager.close()
+    db_manager.close()
 
 app = FastAPI(
     title="Stock Market Data Service",
@@ -297,30 +326,6 @@ app.add_middleware(
 app.include_router(t212_router)
 app.include_router(banking_router)
 
-# Dependency injection functions
-def get_ws_manager():
-    """Get WebSocket manager from app state"""
-    return app.state.ws_manager
-
-def get_demo_ws_manager():
-    """Get demo WebSocket manager from app state"""
-    return app.state.demo_ws_manager
-
-def get_data_aggregator():
-    """Get data aggregator from app state"""
-    return app.state.data_aggregator
-
-def get_db_manager():
-    """Get database manager from app state"""
-    return app.state.db_manager
-
-def get_subscription_manager():
-    """Get subscription manager from app state"""
-    return app.state.subscription_manager
-
-def get_demo_subscription_manager():
-    """Get demo subscription manager from app state"""
-    return app.state.demo_subscription_manager
 
 @app.get("/health")
 def health_check():
@@ -699,9 +704,13 @@ async def tradingview_history(
 async def stream_news_data(token: str):
     """Stream news data via SSE"""
     # Validate token from query parameter (EventSource doesn't support headers)
-    from app.auth import decode_jwt_token
-    user = decode_jwt_token(token)
-    user_id = user.sub
+    try:
+        from app.auth import decode_jwt_token
+        user = decode_jwt_token(token)
+        user_id = user.sub
+    except HTTPException as e:
+        logger.warning("News stream auth failed: %s", e.detail)
+        raise HTTPException(status_code=401, detail="Invalid token for news stream") from e
 
     n_queue = asyncio.Queue(maxsize=10)
     add_news_connection(n_queue)
