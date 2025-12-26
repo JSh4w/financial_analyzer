@@ -20,6 +20,7 @@ CREATE INDEX IF NOT EXISTS idx_bank_requisitions_requisition_id ON bank_requisit
 CREATE INDEX IF NOT EXISTS idx_bank_requisitions_status ON bank_requisitions(status);
 
 -- Add updated_at trigger
+DROP TRIGGER IF EXISTS update_bank_requisitions_updated_at ON bank_requisitions;
 CREATE TRIGGER update_bank_requisitions_updated_at
   BEFORE UPDATE ON bank_requisitions
   FOR EACH ROW
