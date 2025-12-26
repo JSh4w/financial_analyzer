@@ -3,7 +3,6 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 from app.config import Settings
-from models.bank_models import BankAccountBalance
 from models.user_models import User
 from models.stock_models import DailyStockData
 
