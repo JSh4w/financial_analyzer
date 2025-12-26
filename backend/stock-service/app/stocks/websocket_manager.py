@@ -422,12 +422,15 @@ class WebSocketManager:
                     raise ConnectionFailedError("Connection closed by server",e.code) from e
                 if e.code in [1006]:
                     logger.info("Improper handshake closing, try again")
+                    await self.disconnect()
                     continue
             except (OSError, asyncio.TimeoutError) as e:
                 logger.error("Network error : %s", e)
+                await self.disconnect()
                 continue
             except Exception as e:
                 logger.info("Unknown error: %s,  trying again",e)
+                await self.disconnect()
                 continue
             finally:
                 if attempt == self._max_reconnect_attempts:
@@ -494,11 +497,12 @@ class WebSocketManager:
                     logger.critical("FATAL: Connection closed by server. Code: %s" , e.code)
                     return
                 logger.warning("Connection lost. Code: %s", e.code)
+                await self.disconnect()
                 await self._auto_reconnect()
             # DNS / Wifi / Timeout failures
             except (OSError, asyncio.TimeoutError) as e:
                 logger.error("Network error: %s", e)
-                self._websocket = None
+                await self.disconnect()
                 await self._auto_reconnect()
             # Shutdown from command line
             except asyncio.CancelledError:
