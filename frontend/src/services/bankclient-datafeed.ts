@@ -40,4 +40,25 @@ export class BankClientDatafeed {
     return data; // { link: string, requisition_id: string }
   }
 
+  /**
+   * Fetches all account balances for the authenticated user
+   */
+  async getAllBalances(token: string) {
+    const response = await fetch(`${BACKEND_URL}/banking/all_balances`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Failed to fetch balances: ${error}`);
+    }
+
+    const data = await response.json();
+    return data; // { balances: { [requisition_id]: balances[] } }
+  }
+
 }

@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase'
 import { apiClient } from '../lib/api-client'
 import { getAuthToken } from '../lib/auth'
 import SelectBank from './SelectBank'
+import AccountBalances from './AccountBalances'
 
 interface StockData {
   symbol: string
@@ -31,12 +32,14 @@ interface StockSubscription {
 }
 
 type View = 'stocks' | 'portfolio'
+type PortfolioSubView = 'connect' | 'balances'
 
 export default function Dashboard() {
   const [searchSymbol, setSearchSymbol] = useState('')
   const [activeStocks, setActiveStocks] = useState<Map<string, StockSubscription>>(new Map())
   const [selectedStock, setSelectedStock] = useState<string | null>(null)
   const [currentView, setCurrentView] = useState<View>('stocks')
+  const [portfolioSubView, setPortfolioSubView] = useState<PortfolioSubView>('connect')
   const [globalStatus, setGlobalStatus] = useState('')
   const [bankConnectionStatus, setBankConnectionStatus] = useState<'idle' | 'success' | 'error'>('idle')
   const [bankConnectionMessage, setBankConnectionMessage] = useState('')
@@ -54,12 +57,14 @@ export default function Dashboard() {
       setBankConnectionStatus('error')
       setBankConnectionMessage(`Bank connection failed: ${error}`)
       setCurrentView('portfolio')
+      setPortfolioSubView('connect')
       // Clean up URL
       window.history.replaceState({}, '', '/portfolio')
     } else if (ref) {
       setBankConnectionStatus('success')
       setBankConnectionMessage('Bank connected successfully! You can now access your account data.')
       setCurrentView('portfolio')
+      setPortfolioSubView('balances')
       // Clean up URL
       window.history.replaceState({}, '', '/portfolio')
       // Auto-dismiss after 10 seconds
@@ -616,15 +621,54 @@ export default function Dashboard() {
               <div style={{
                 backgroundColor: '#1a1a1a',
                 borderRadius: '12px',
-                padding: '60px',
-                textAlign: 'center',
+                padding: '24px',
                 border: '1px solid #2a2a2a'
               }}>
-                <h2 style={{ fontSize: '24px', marginBottom: '12px', color: '#e0e0e0' }}>Portfolio</h2>
-                <p style={{ fontSize: '16px', color: '#666' }}>
-                  Your portfolio view is coming soon. Track your investments, performance, and more.
-                </p>
+                <h2 style={{ fontSize: '24px', marginBottom: '24px', color: '#e0e0e0' }}>Portfolio</h2>
 
+                {/* Tabs for Portfolio Subsections */}
+                <div style={{
+                  display: 'flex',
+                  gap: '12px',
+                  marginBottom: '24px',
+                  borderBottom: '1px solid #2a2a2a',
+                  paddingBottom: '0'
+                }}>
+                  <button
+                    onClick={() => setPortfolioSubView('connect')}
+                    style={{
+                      padding: '12px 24px',
+                      backgroundColor: 'transparent',
+                      border: 'none',
+                      color: portfolioSubView === 'connect' ? '#3b82f6' : '#a0a0a0',
+                      cursor: 'pointer',
+                      fontSize: '14px',
+                      fontWeight: '500',
+                      borderBottom: portfolioSubView === 'connect' ? '2px solid #3b82f6' : '2px solid transparent',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    Connect Bank
+                  </button>
+                  <button
+                    onClick={() => setPortfolioSubView('balances')}
+                    style={{
+                      padding: '12px 24px',
+                      backgroundColor: 'transparent',
+                      border: 'none',
+                      color: portfolioSubView === 'balances' ? '#3b82f6' : '#a0a0a0',
+                      cursor: 'pointer',
+                      fontSize: '14px',
+                      fontWeight: '500',
+                      borderBottom: portfolioSubView === 'balances' ? '2px solid #3b82f6' : '2px solid transparent',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    View Balances
+                  </button>
+                </div>
+
+                {/* Bank Connection Status Messages */}
                 {bankConnectionStatus === 'success' && (
                   <div style={{
                     backgroundColor: '#10b981',
@@ -651,7 +695,14 @@ export default function Dashboard() {
                   </div>
                 )}
 
-                <SelectBank onSelect={(inst) => console.log('Selected bank:', inst)} />
+                {/* Content based on selected subsection */}
+                {portfolioSubView === 'connect' && (
+                  <SelectBank onSelect={(inst) => console.log('Selected bank:', inst)} />
+                )}
+
+                {portfolioSubView === 'balances' && (
+                  <AccountBalances />
+                )}
               </div>
             ) : activeStocks.size === 0 ? (
               <div style={{
