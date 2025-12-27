@@ -1,5 +1,6 @@
 """Database handler to connect to Supabase"""
 import logging
+import json
 from datetime import datetime, timedelta, timezone
 
 from app.config import Settings
@@ -7,6 +8,7 @@ from models.user_models import User
 from models.stock_models import DailyStockData
 
 from supabase import create_client, Client
+from cryptography.fernet import Fernet
 
 logger = logging.getLogger(__name__)
 settings = Settings()
@@ -17,6 +19,7 @@ class DatabaseManager:
         self.supabase_url = settings.SUPABASE_URL
         self.supabase_key = settings.SUPABASE_KEY
         self.client: Client = None
+        self.cipher = Fernet(settings.BANK_ENCRYPTION_KEY.encode())
 
     def connect(self) -> bool:
         """Initialize Supabase client"""
@@ -27,6 +30,25 @@ class DatabaseManager:
         except Exception as e:
             logger.error("Failed to connect to Supabase: %s", e)
             return False
+
+    def _encrypt_balances(self, balances: list[dict]) -> str:
+        """Encrypt balance data before storing in database"""
+        try:
+            json_data = json.dumps(balances)
+            encrypted = self.cipher.encrypt(json_data.encode())
+            return encrypted.decode()
+        except Exception as e:
+            logger.error("Failed to encrypt balances: %s", e)
+            raise
+
+    def _decrypt_balances(self, encrypted_balances: str) -> list[dict]:
+        """Decrypt balance data after retrieving from database"""
+        try:
+            decrypted = self.cipher.decrypt(encrypted_balances.encode())
+            return json.loads(decrypted.decode())
+        except Exception as e:
+            logger.error("Failed to decrypt balances: %s", e)
+            raise
 
     def insert_historic_stock_data(self, stock_data: DailyStockData) -> bool:
         """Insert stock price data"""
@@ -133,6 +155,9 @@ class DatabaseManager:
         """Get stored balance details for a bank account"""
         try:
             result = self.client.table("bank_account_balances").select("*").eq("account_id", account_id).single().execute()
+            if result.data and result.data.get("balances"):
+                # Decrypt balances before returning
+                result.data["balances"] = self._decrypt_balances(result.data["balances"])
             return result.data
         except Exception as e:
             logger.error("Failed to get balance details: %s", e)
@@ -169,10 +194,13 @@ class DatabaseManager:
             if rate_limit_reset_seconds:
                 can_refresh_at = now + timedelta(seconds=rate_limit_reset_seconds)
 
+            # Encrypt balances before storing
+            encrypted_balances = self._encrypt_balances(balances)
+
             data = {
                 "user_id": user_id,
                 "account_id": account_id,
-                "balances": balances,
+                "balances": encrypted_balances,
                 "last_fetched_at": now.isoformat(),
                 "can_refresh_at": can_refresh_at.isoformat() if can_refresh_at else None,
                 "rate_limit_remaining": rate_limit_remaining,
