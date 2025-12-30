@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 settings = Settings()
 
 class DatabaseManager:
-    """Handlers collating and sending data models to the database"""
+    """Handlers collating and sending data models to the supabase database"""
     def __init__(self):
         self.supabase_url = settings.SUPABASE_URL
         self.supabase_key = settings.SUPABASE_KEY

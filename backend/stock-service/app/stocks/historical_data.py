@@ -1,6 +1,5 @@
 """Historical data fetcher for Alpaca API"""
 import httpx
-import asyncio
 import logging
 from typing import Dict, List, Optional
 from datetime import datetime, timedelta, timezone
