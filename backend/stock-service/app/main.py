@@ -1,4 +1,5 @@
 """Main backend application using FastAPI for stock analysis"""
+import contextlib
 import json
 import asyncio
 from collections.abc import AsyncIterator
@@ -6,6 +7,8 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from logging import getLogger
 from typing import Dict, List, TypedDict
+
+import httpx
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -194,7 +197,7 @@ async def connect_to_websocket(
         raise e
 
 @asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncIterator[State]:
+async def lifespan(app: FastAPI) -> AsyncIterator[Dict]:
     """FastAPI lifespan manager - startup and shutdown events"""
     # STARTUP: Initialize components when app starts
     logger.info("Starting application components...")
@@ -221,7 +224,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[State]:
     )
 
     # Start processing task
-    asyncio.create_task(data_aggregator.process_tick_queue())
+    aggregator_task = asyncio.create_task(
+        data_aggregator.process_tick_queue()
+    )
 
     # Initialize WebSocket manager with the shared queue
     # "wss://stream.data.alpaca.markets/v2/test for FAKEPACA
@@ -263,9 +268,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[State]:
 
     news_broadcast_task = asyncio.create_task(broadcast_news(news_queue))
 
+
+    # Initialize GoCardless client for banking operations
+    banking_http_client = httpx.AsyncClient(
+        base_url="https://bankaccountdata.gocardless.com",
+        headers={"accept": "application/json"},
+        timeout=10.0
+    )
     banking_client = GoCardlessClient(
         secret_id=settings.GO_CARDLESS_SECRET_ID,
-        secret_key=settings.GO_CARDLESS_SECRET_KEY
+        secret_key=settings.GO_CARDLESS_SECRET_KEY,
+        http_client=banking_http_client,
     )
 
     # Initialize Supabase database manager for user data and banking requisitions
@@ -291,6 +304,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[State]:
 
     # SHUTDOWN: Clean up when app stops
     logger.info("Shutting down application components...")
+
+    aggregator_task.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await aggregator_task
 
     await data_aggregator.shutdown()
     await ws_manager.stop()
