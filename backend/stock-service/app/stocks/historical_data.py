@@ -1,8 +1,9 @@
 """Historical data fetcher for Alpaca API"""
-import httpx
 import logging
-from typing import Dict, List, Optional
+from typing import List, Optional
 from datetime import datetime, timedelta, timezone
+
+import httpx
 from models.websocket_models import BarData
 
 logger = logging.getLogger(__name__)
