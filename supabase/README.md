@@ -21,16 +21,16 @@ This folder contains SQL migration files for the Supabase database.
 
 ```bash
 # Install Supabase CLI
-npm install supabase
+npm install supabase --save-dev
 
 # Initialize Supabase in project
-supabase init
+npx supabase init
 
 # Create a new migration
-supabase migration new migration_name
+npx supabase migration new migration_name
 
 # Apply migrations
-supabase db push
+npx supabase db push
 ```
 
 ## Migration Naming Convention
