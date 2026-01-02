@@ -112,7 +112,7 @@ def get_current_user(
     """
     FastAPI dependency to get the current authenticated user from JWT token
 
-    Usage in your route:
+    Usage:
         @app.get("/protected")
         async def protected_route(user: TokenPayload = Depends(get_current_user)):
             return {"user_id": user.sub, "email": user.email}
@@ -136,7 +136,7 @@ def get_current_user_id(
     """
     FastAPI dependency to get just the user ID (simpler than full token payload)
 
-    Usage in your route:
+    Usage:
         @app.get("/my-data")
         async def my_data(user_id: str = Depends(get_current_user_id)):
             return {"user_id": user_id}
