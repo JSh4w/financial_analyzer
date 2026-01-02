@@ -4,5 +4,13 @@
   ],
   "pylint.args": [
     "--init-hook=import sys; sys.path.append('${workspaceFolder}/backend/stock-service')"
-  ]
+  ],
+  "[python]": {
+    "editor.formatOnSave": true,
+    "editor.defaultFormatter": "charliermarsh.ruff",
+    "editor.codeActionsOnSave": {
+      "source.organizeImports.ruff": "explicit",
+      "source.fixAll.ruff": "explicit"
+    }
+  }
 }
