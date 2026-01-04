@@ -7,6 +7,7 @@ import { apiClient } from '../lib/api-client'
 import { getAuthToken } from '../lib/auth'
 import SelectBank from './SelectBank'
 import AccountBalances from './AccountBalances'
+import AllBalances from './AllBalances'
 
 interface StockData {
   symbol: string
@@ -32,14 +33,14 @@ interface StockSubscription {
 }
 
 type View = 'stocks' | 'portfolio'
-type PortfolioSubView = 'connect' | 'balances'
+type PortfolioSubView = 'all' | 'connect' | 'balances'
 
 export default function Dashboard() {
   const [searchSymbol, setSearchSymbol] = useState('')
   const [activeStocks, setActiveStocks] = useState<Map<string, StockSubscription>>(new Map())
   const [selectedStock, setSelectedStock] = useState<string | null>(null)
   const [currentView, setCurrentView] = useState<View>('stocks')
-  const [portfolioSubView, setPortfolioSubView] = useState<PortfolioSubView>('connect')
+  const [portfolioSubView, setPortfolioSubView] = useState<PortfolioSubView>('all')
   const [globalStatus, setGlobalStatus] = useState('')
   const [bankConnectionStatus, setBankConnectionStatus] = useState<'idle' | 'success' | 'error'>('idle')
   const [bankConnectionMessage, setBankConnectionMessage] = useState('')
@@ -64,7 +65,7 @@ export default function Dashboard() {
       setBankConnectionStatus('success')
       setBankConnectionMessage('Bank connected successfully! You can now access your account data.')
       setCurrentView('portfolio')
-      setPortfolioSubView('balances')
+      setPortfolioSubView('all')
       // Clean up URL
       window.history.replaceState({}, '', '/portfolio')
       // Auto-dismiss after 10 seconds
@@ -635,6 +636,22 @@ export default function Dashboard() {
                   paddingBottom: '0'
                 }}>
                   <button
+                    onClick={() => setPortfolioSubView('all')}
+                    style={{
+                      padding: '12px 24px',
+                      backgroundColor: 'transparent',
+                      border: 'none',
+                      color: portfolioSubView === 'all' ? '#3b82f6' : '#a0a0a0',
+                      cursor: 'pointer',
+                      fontSize: '14px',
+                      fontWeight: '500',
+                      borderBottom: portfolioSubView === 'all' ? '2px solid #3b82f6' : '2px solid transparent',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    All Balances
+                  </button>
+                  <button
                     onClick={() => setPortfolioSubView('connect')}
                     style={{
                       padding: '12px 24px',
@@ -664,7 +681,7 @@ export default function Dashboard() {
                       transition: 'all 0.2s'
                     }}
                   >
-                    View Balances
+                    Bank Balances
                   </button>
                 </div>
 
@@ -696,6 +713,10 @@ export default function Dashboard() {
                 )}
 
                 {/* Content based on selected subsection */}
+                {portfolioSubView === 'all' && (
+                  <AllBalances />
+                )}
+
                 {portfolioSubView === 'connect' && (
                   <SelectBank onSelect={(inst) => console.log('Selected bank:', inst)} />
                 )}
