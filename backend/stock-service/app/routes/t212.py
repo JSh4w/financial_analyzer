@@ -1,3 +1,5 @@
+"""Routes for Trading212 API integration."""
+
 from __future__ import annotations
 
 from logging import getLogger
@@ -43,8 +45,6 @@ async def add_user_keys_t212(
         "t212_key_secret": db.encrypt_string(user_secret),
     }
     db.client.table("t212").upsert(data).execute()
-    # user_key = db._encrypt_data(user_key)
-    # user_secret = db._encrypt_data(user_secret)
 
 
 @t212_router.get("/T212_remove_user_keys")
@@ -91,8 +91,29 @@ def get_t212_account_summary(
         response.raise_for_status()
         data = response.json()
         return data
-    except Exception as e:
-        logger.error(f"T212 API request failed: {str(e)}")
+    except requests.exceptions.Timeout as e:
+        logger.error("T212 API timeout for user %s: %s", user_id, str(e))
+        raise HTTPException(
+            status_code=504, detail="Trading212 API request timed out"
+        ) from e
+
+    except requests.exceptions.HTTPError as e:
+        logger.error("T212 API HTTP error for user %s: %s", user_id, str(e))
+        status_code = e.response.status_code if e.response else 500
+
+        # Handle rate limiting specifically
+        if status_code == 429:
+            raise HTTPException(
+                status_code=429,
+                detail="Rate limit exceeded. Trading212 allows 1 request per second.",
+            ) from e
+
+        raise HTTPException(
+            status_code=status_code, detail=f"Trading212 API error: {str(e)}"
+        ) from e
+
+    except requests.exceptions.RequestException as e:
+        logger.error("T212 API request failed for user %s: %s", user_id, str(e))
         raise HTTPException(
             status_code=500, detail=f"Failed to fetch Trading212 data: {str(e)}"
         ) from e
@@ -126,35 +147,30 @@ def get_t212_account_positions(
         response.raise_for_status()
         data = response.json()
         return data
-    except Exception as e:
-        logger.error(f"T212 API request failed: {str(e)}")
+
+    except requests.exceptions.Timeout as e:
+        logger.error("T212 API timeout for user %s: %s", user_id, str(e))
+        raise HTTPException(
+            status_code=504, detail="Trading212 API request timed out"
+        ) from e
+
+    except requests.exceptions.HTTPError as e:
+        logger.error("T212 API HTTP error for user %s: %s", user_id, str(e))
+        status_code = e.response.status_code if e.response else 500
+
+        # Handle rate limiting specifically
+        if status_code == 429:
+            raise HTTPException(
+                status_code=429,
+                detail="Rate limit exceeded. Trading212 allows 1 request per second.",
+            ) from e
+
+        raise HTTPException(
+            status_code=status_code, detail=f"Trading212 API error: {str(e)}"
+        ) from e
+
+    except requests.exceptions.RequestException as e:
+        logger.error("T212 API request failed for user %s: %s", user_id, str(e))
         raise HTTPException(
             status_code=500, detail=f"Failed to fetch Trading212 data: {str(e)}"
         ) from e
-
-        # except requests.exceptions.Timeout as e:
-        #     logger.error(f"T212 API timeout for user {user_id}: {str(e)}")
-        #     raise HTTPException(
-        #         status_code=504, detail="Trading212 API request timed out"
-        #     ) from e
-
-        # except requests.exceptions.HTTPError as e:
-        #     logger.error(f"T212 API HTTP error for user {user_id}: {str(e)}")
-        #     status_code = e.response.status_code if e.response else 500
-
-        #     # Handle rate limiting specifically
-        #     if status_code == 429:
-        #         raise HTTPException(
-        #             status_code=429,
-        #             detail="Rate limit exceeded. Trading212 allows 1 request per 5 seconds.",
-        #         ) from e
-
-        #     raise HTTPException(
-        #         status_code=status_code, detail=f"Trading212 API error: {str(e)}"
-        #     ) from e
-
-        # except requests.exceptions.RequestException as e:
-        #     logger.error(f"T212 API request failed for user {user_id}: {str(e)}")
-        #     raise HTTPException(
-        #         status_code=500, detail=f"Failed to fetch Trading212 data: {str(e)}"
-        #     ) from e
