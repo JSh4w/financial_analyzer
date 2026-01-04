@@ -6,9 +6,6 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8001:8001"
-    env_file:
-      - path: ./backend/stock-service/.env
-        required: false
     volumes:
       - ./backend/stock-service:/app
       - pip_cache:/root/.cache/pip
