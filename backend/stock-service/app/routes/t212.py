@@ -83,10 +83,21 @@ def get_t212_account_summary(
         HTTPException: If the API request fails
     """
     try:
-        data = db.client.table("t212").select("*").eq("user_id", user_id).execute()
+        data = (
+            db.client.table("t212")
+            .select("*")
+            .eq("user_id", user_id)
+            .maybe_single()
+            .execute()
+        )
+        if not data or not data.data:
+            raise HTTPException(
+                status_code=404,
+                detail="Trading212 API keys not found for the user.",
+            )
         url = "https://live.trading212.com/api/v0/equity/account/summary"
-        auth = (data["t212_key_id"], data["t212_key_secret"])
-        headers = {"Authorization": data["t212_key_id"]}
+        auth = (data.data["t212_key_id"], data.data["t212_key_secret"])
+        headers = {"Authorization": data.data["t212_key_id"]}
         response = requests.get(url, headers=headers, auth=auth, timeout=5)
         response.raise_for_status()
         data = response.json()
@@ -139,10 +150,21 @@ def get_t212_account_positions(
         HTTPException: If the API request fails
     """
     try:
-        data = db.client.table("t212").select("*").eq("user_id", user_id).execute()
+        data = (
+            db.client.table("t212")
+            .select("*")
+            .eq("user_id", user_id)
+            .maybe_single()
+            .execute()
+        )
+        if not data or not data.data:
+            raise HTTPException(
+                status_code=404,
+                detail="Trading212 API keys not found for the user.",
+            )
         url = "https://live.trading212.com/api/v0/equity/positions"
-        auth = (data["t212_key_id"], data["t212_key_secret"])
-        headers = {"Authorization": data["t212_key_id"]}
+        auth = (data.data["t212_key_id"], data.data["t212_key_secret"])
+        headers = {"Authorization": data.data["t212_key_id"]}
         response = requests.get(url, headers=headers, auth=auth, timeout=5)
         response.raise_for_status()
         data = response.json()
