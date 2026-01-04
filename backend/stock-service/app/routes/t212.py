@@ -3,8 +3,11 @@ from __future__ import annotations
 from logging import getLogger
 
 import requests
+from app.auth import get_current_user_id
 from app.config import Settings
-from fastapi import APIRouter, HTTPException
+from app.database.external_database_manager import DatabaseManager
+from app.dependencies import get_supabase_db
+from fastapi import APIRouter, Depends, HTTPException
 
 settings = Settings()
 logger = getLogger(__name__)
@@ -12,8 +15,58 @@ logger = getLogger(__name__)
 t212_router = APIRouter()
 
 
+# endpoints
+# add secret, add user_key
+# delete secret and user_key
+# get account summary
+# get investment summary
+# its all stateless and doesnt need stored info
+@t212_router.get("/T212_add_user_keys")
+async def add_user_keys_t212(
+    db: DatabaseManager = Depends(get_supabase_db),
+    user_id: str = Depends(get_current_user_id),
+    user_secret: str = None,
+    user_key: str = None,
+):
+    """
+    Store Trading212 API keys for the authenticated user.
+    Args:
+        db (DatabaseManager): Database manager instance.
+        user_id (str): Authenticated user ID from JWT token.
+        user_secret (str): Trading212 API secret key.
+        user_key (str): Trading212 API key ID.
+    Returns: None.
+    """
+    data = {
+        "user_id": user_id,
+        "t212_key_id": db.encrypt_string(user_key),
+        "t212_key_secret": db.encrypt_string(user_secret),
+    }
+    db.client.table("t212").upsert(data).execute()
+    # user_key = db._encrypt_data(user_key)
+    # user_secret = db._encrypt_data(user_secret)
+
+
+@t212_router.get("/T212_remove_user_keys")
+async def remove_user_keys_t212(
+    db: DatabaseManager = Depends(get_supabase_db),
+    user_id: str = Depends(get_current_user_id),
+):
+    """
+    Remove Trading212 API keys for the authenticated user.
+    Args:
+        db (DatabaseManager): Database manager instance.
+        user_id (str): Authenticated user ID from JWT token.
+    Returns: None.
+    """
+    db.client.table("t212").delete().eq("user_id", user_id).execute()
+
+
 @t212_router.get("/T212_summary")
-def get_t212_account_summary():
+def get_t212_account_summary(
+    db: DatabaseManager = Depends(get_supabase_db),
+    user_id: str = Depends(get_current_user_id),
+):
     """
     Provides a breakdown of your account's cash and investment metrics,
     including available funds, invested capital, and total account value.
@@ -30,9 +83,10 @@ def get_t212_account_summary():
         HTTPException: If the API request fails
     """
     try:
+        data = db.client.table("t212").select("*").eq("user_id", user_id).execute()
         url = "https://live.trading212.com/api/v0/equity/account/summary"
-        auth = (settings.T212_KEY_ID, settings.T212_SECRET_KEY)
-        headers = {"Authorization": settings.T212_KEY_ID}
+        auth = (data["t212_key_id"], data["t212_key_secret"])
+        headers = {"Authorization": data["t212_key_id"]}
         response = requests.get(url, headers=headers, auth=auth, timeout=5)
         response.raise_for_status()
         data = response.json()
@@ -45,7 +99,10 @@ def get_t212_account_summary():
 
 
 @t212_router.get("/T212_positions")
-def get_t212_account_positions():
+def get_t212_account_positions(
+    db: DatabaseManager = Depends(get_supabase_db),
+    user_id: str = Depends(get_current_user_id),
+):
     """
     Fetch all open positions for your account
 
@@ -61,9 +118,10 @@ def get_t212_account_positions():
         HTTPException: If the API request fails
     """
     try:
+        data = db.client.table("t212").select("*").eq("user_id", user_id).execute()
         url = "https://live.trading212.com/api/v0/equity/positions"
-        auth = (settings.T212_KEY_ID, settings.T212_SECRET_KEY)
-        headers = {"Authorization": settings.T212_KEY_ID}
+        auth = (data["t212_key_id"], data["t212_key_secret"])
+        headers = {"Authorization": data["t212_key_id"]}
         response = requests.get(url, headers=headers, auth=auth, timeout=5)
         response.raise_for_status()
         data = response.json()

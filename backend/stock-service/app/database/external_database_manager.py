@@ -36,23 +36,41 @@ class DatabaseManager:
             logger.error("Failed to connect to Supabase: %s", e)
             return False
 
-    def _encrypt_balances(self, balances: list[dict]) -> str:
-        """Encrypt balance data before storing in database"""
+    def encrypt_string(self, data: str) -> str:
+        """Encrypt a string before storing in database"""
         try:
-            json_data = json.dumps(balances)
+            encrypted = self.cipher.encrypt(data.encode())
+            return encrypted.decode()
+        except Exception as e:
+            logger.error("Failed to encrypt string: %s", e)
+            raise
+
+    def decrypt_string(self, encrypted_data: str) -> str:
+        """Decrypt a string after retrieving from database"""
+        try:
+            decrypted = self.cipher.decrypt(encrypted_data.encode())
+            return decrypted.decode()
+        except Exception as e:
+            logger.error("Failed to decrypt string: %s", e)
+            raise
+
+    def _encrypt_data(self, data: list[dict]) -> str:
+        """Encrypt data before storing in database"""
+        try:
+            json_data = json.dumps(data)
             encrypted = self.cipher.encrypt(json_data.encode())
             return encrypted.decode()
         except Exception as e:
-            logger.error("Failed to encrypt balances: %s", e)
+            logger.error("Failed to encrypt data: %s", e)
             raise
 
-    def _decrypt_balances(self, encrypted_balances: str) -> list[dict]:
-        """Decrypt balance data after retrieving from database"""
+    def _decrypt_data(self, encrypted_data: str) -> list[dict]:
+        """Decrypt data after retrieving from database"""
         try:
-            decrypted = self.cipher.decrypt(encrypted_balances.encode())
+            decrypted = self.cipher.decrypt(encrypted_data.encode())
             return json.loads(decrypted.decode())
         except Exception as e:
-            logger.error("Failed to decrypt balances: %s", e)
+            logger.error("Failed to decrypt data: %s", e)
             raise
 
     def insert_historic_stock_data(self, stock_data: DailyStockData) -> bool:
@@ -163,7 +181,6 @@ class DatabaseManager:
                 "institution_id": institution_id,
                 "reference": reference,
                 "status": "pending",
-                "created_at": "now()",
             }
             result = self.client.table("bank_requisitions").insert(data).execute()
             logger.info("Requisition stored: %s", requisition_id)
@@ -186,9 +203,7 @@ class DatabaseManager:
             logger.error("Failed to get requisitions: %s", e)
             return None
 
-    def get_balance_details_for_account(
-        self, user_id: str, account_id: str
-    ) -> dict | None:
+    def get_balance_details_for_account(self, account_id: str) -> dict | None:
         """Get stored balance details for a bank account"""
         try:
             result = (
@@ -200,9 +215,7 @@ class DatabaseManager:
             )
             if result.data and result.data.get("balances"):
                 # Decrypt balances before returning
-                result.data["balances"] = self._decrypt_balances(
-                    result.data["balances"]
-                )
+                result.data["balances"] = self._decrypt_data(result.data["balances"])
             return result.data
         except Exception as e:
             logger.error("Failed to get balance details: %s", e)
@@ -248,7 +261,7 @@ class DatabaseManager:
                 can_refresh_at = now + timedelta(seconds=rate_limit_reset_seconds)
 
             # Encrypt balances before storing
-            encrypted_balances = self._encrypt_balances(balances)
+            encrypted_balances = self._encrypt_data(balances)
 
             data = {
                 "user_id": user_id,
@@ -287,21 +300,3 @@ class DatabaseManager:
         except Exception as e:
             logger.error("Failed to store/update balance: %s", e)
             return None
-
-
-#
-#
-# {
-# "balances": [
-#   {
-#     "balanceAmount": {
-#       "amount": "271.0600",
-#       "currency": "GBP"
-#     },
-#     "balanceType": "closingAvailable",
-#     "referenceDate": "2025-11-12"
-#   }
-# ]
-# }
-#
-#
