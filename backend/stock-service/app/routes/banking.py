@@ -192,7 +192,7 @@ async def get_all_balances(
 
             # Check each account for cached data and rate limit status
             for account in accounts_list:
-                account_balance = db.get_balance_details_for_account(user_id, account)
+                account_balance = db.get_balance_details_for_account(account)
 
                 if account_balance and not db.can_refresh_balance(account):
                     # Use cached data - rate limit still active
