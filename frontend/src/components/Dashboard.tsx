@@ -46,7 +46,7 @@ export default function Dashboard() {
   const [bankConnectionMessage, setBankConnectionMessage] = useState('')
   const eventSourcesRef = useRef<Map<string, EventSource>>(new Map())
 
-  const BACKEND_URL = 'http://localhost:8001'
+  const BACKEND_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001'
 
   // Handle GoCardless callback
   useEffect(() => {
