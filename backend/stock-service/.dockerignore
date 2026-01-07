@@ -1,0 +1,35 @@
+# Environment files - NEVER include in image
+.env
+.env.*
+*.env
+
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+.pytest_cache
+.mypy_cache
+.ruff_cache
+*.egg-info
+.venv
+venv
+
+# IDE
+.vscode
+.idea
+
+# Logs
+logs/
+*.log
+
+# Tests
+tests/
+test_*.py
+
+# Documentation
+*.md
+docs/
