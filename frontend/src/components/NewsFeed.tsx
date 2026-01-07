@@ -21,9 +21,10 @@ function NewsFeed({ backendUrl }: NewsFeedProps) {
   const eventSourceRef = useRef<EventSource | null>(null)
 
   useEffect(() => {
-    let reconnectAttempts = 0 
+    let reconnectAttempts = 0
     const maxReconnectAttempts = 3
     let reconnectTimeout: NodeJS.Timeout
+
     // Connect to news stream with authentication
     const connectNewsStream = async () => {
       try {
@@ -32,6 +33,11 @@ function NewsFeed({ backendUrl }: NewsFeedProps) {
           console.error('Not authenticated for news stream')
           setStatus('error')
           return
+        }
+
+        // Close existing connection before creating new one
+        if (eventSourceRef.current) {
+          eventSourceRef.current.close()
         }
 
         const eventSource = new EventSource(`${backendUrl}/news/stream?token=${token}`)
@@ -53,13 +59,13 @@ function NewsFeed({ backendUrl }: NewsFeedProps) {
 
         eventSource.onerror = (error) => {
           console.error('News stream error:', error)
-          setStatus('error')
           eventSource.close()
+          setStatus('error')
 
           // Attempt to reconnect
           if (reconnectAttempts < maxReconnectAttempts) {
-            reconnectAttempts ++
-            console.log("News stream connection uncessfule, attempt %{reconnectAttempts}...", reconnectAttempts)
+            reconnectAttempts++
+            console.log(`News stream connection unsuccessful, attempt ${reconnectAttempts}...`)
             setStatus('connecting')
             reconnectTimeout = setTimeout(() => {
               connectNewsStream()
@@ -76,8 +82,10 @@ function NewsFeed({ backendUrl }: NewsFeedProps) {
 
     // Cleanup on unmount
     return () => {
+      clearTimeout(reconnectTimeout)
       if (eventSourceRef.current) {
         eventSourceRef.current.close()
+        eventSourceRef.current = null
       }
     }
   }, [backendUrl])
