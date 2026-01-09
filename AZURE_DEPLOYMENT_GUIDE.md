@@ -166,6 +166,9 @@ Before running this, you'll need to know your environment variables. Check your 
 
 Replace "YOUR" with the actual values from your .env file
 
+min-replicas is 0 so it can scale down to no servers
+max-replicas is 1 for now; we can't scale horizontally without redis and or microservices
+
 ```bash
 az containerapp create \
     --name stock-service \
@@ -177,8 +180,8 @@ az containerapp create \
     --registry-password $ACR_PASSWORD \
     --target-port 8001 \
     --ingress external \
-    --min-replicas 1 \
-    --max-replicas 3 \
+    --min-replicas 0 \
+    --max-replicas 1 \
     --cpu 1.0 \
     --memory 2.0Gi \
     --secrets \
@@ -262,7 +265,7 @@ This creates an optimized production build in the `dist/` directory.
 ### Step 13: Deploy to Azure Static Web Apps
 
 ```bash
-STATIC_APP_NAME="financial-analyzer-web"
+STATIC_APP_NAME="lucrum-stack-web"
 
 # Create the static web app
 az staticwebapp create \
