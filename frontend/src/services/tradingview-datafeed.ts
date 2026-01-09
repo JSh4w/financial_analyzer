@@ -14,10 +14,6 @@ interface Bar {
   volume?: number;
 }
 
-interface SubscriberUID {
-  id: string;
-}
-
 interface DatafeedConfiguration {
   supported_resolutions: string[];
   supports_marks: boolean;
@@ -157,10 +153,10 @@ export class AlpacaDatafeed {
    */
   subscribeBars(
     symbolInfo: LibrarySymbolInfo,
-    resolution: string,
+    //resolution: string,
     onTick: (bar: Bar) => void,
     listenerGuid: string,
-    onResetCacheNeededCallback: () => void
+    //onResetCacheNeededCallback: () => void
   ) {
     console.log('[Datafeed] subscribeBars:', symbolInfo.ticker, listenerGuid);
 

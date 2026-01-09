@@ -201,7 +201,6 @@ const StockChart: React.FC<StockChartProps> = ({ symbol, candles }) => {
           type: 'candlestick',
           data: candlestickData,
           barMaxWidth: 50,
-          barCategoryGap: '2px',  // Fixed pixel gap
           itemStyle: {
             color: '#4CAF50',      // Rising candles (green)
             color0: '#f44336',     // Falling candles (red)
@@ -247,7 +246,7 @@ const StockChart: React.FC<StockChartProps> = ({ symbol, candles }) => {
     }
 
     // Use notMerge: false to allow smooth updates
-    chartInstance.current.setOption(option, { notMerge: false, lazyUpdate: false })
+    chartInstance.current.setOption(option as any, { notMerge: false, lazyUpdate: false })
 
     // Handle window resize
     const handleResize = () => {

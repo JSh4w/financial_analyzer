@@ -718,7 +718,7 @@ export default function Dashboard() {
                 )}
 
                 {portfolioSubView === 'connect' && (
-                  <SelectBank onSelect={(inst) => console.log('Selected bank:', inst)} />
+                  <SelectBank />
                 )}
 
                 {portfolioSubView === 'balances' && (

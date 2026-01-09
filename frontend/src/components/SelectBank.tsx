@@ -13,7 +13,7 @@ interface Institution {
   max_access_valid_for_days_reconfirmation?: string
 }
 
-export default function SelectBank({ onSelect }: { onSelect?: (inst: Institution) => void }) {
+export default function SelectBank() {
   const [institutions, setInstitutions] = useState<Institution[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)

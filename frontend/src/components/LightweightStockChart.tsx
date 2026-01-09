@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { createChart, CandlestickSeries, HistogramSeries, type IChartApi, type CandlestickData } from 'lightweight-charts';
+import { createChart, CandlestickSeries, HistogramSeries, type IChartApi, type CandlestickData, type Time } from 'lightweight-charts';
 
 interface CandleData {
   open: number;
@@ -140,7 +140,7 @@ const LightweightStockChart: React.FC<LightweightStockChartProps> = ({ symbol, c
     const candlestickData: CandlestickData[] = sortedEntries.map(([timestamp, candle]) => {
       const date = new Date(timestamp);
       // Convert to Unix timestamp in seconds
-      const time = Math.floor(date.getTime() / 1000);
+      const time = Math.floor(date.getTime() / 1000) as Time;
 
       return {
         time,
@@ -153,7 +153,7 @@ const LightweightStockChart: React.FC<LightweightStockChartProps> = ({ symbol, c
 
     const volumeData = sortedEntries.map(([timestamp, candle]) => {
       const date = new Date(timestamp);
-      const time = Math.floor(date.getTime() / 1000);
+      const time = Math.floor(date.getTime() / 1000) as Time;
 
       // Color volume bars based on price movement
       const isGreen = candle.close >= candle.open;
