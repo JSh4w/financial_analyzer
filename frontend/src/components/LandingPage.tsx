@@ -30,7 +30,7 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
       display: 'flex',
       justifyContent: 'space-between',
       alignItems: 'center',
-      padding: '20px 60px',
+      padding: '28px 60px',
       position: 'fixed' as const,
       top: 0,
       left: 0,
@@ -47,11 +47,11 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
       cursor: 'pointer',
     },
     logoImage: {
-      height: '36px',
+      height: '48px',
       width: 'auto',
     },
     logoText: {
-      fontSize: '22px',
+      fontSize: '26px',
       fontWeight: 700,
       color: '#ffffff',
     },
@@ -77,18 +77,6 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
       padding: '160px 20px 100px',
       minHeight: '100vh',
       background: `radial-gradient(ellipse at top, rgba(13, 148, 136, 0.15) 0%, transparent 50%)`,
-    },
-    badge: {
-      display: 'inline-flex',
-      alignItems: 'center',
-      gap: '8px',
-      padding: '8px 16px',
-      backgroundColor: `rgba(13, 148, 136, 0.1)`,
-      border: `1px solid rgba(13, 148, 136, 0.3)`,
-      borderRadius: '50px',
-      fontSize: '14px',
-      color: theme.accent,
-      marginBottom: '24px',
     },
     headline: {
       fontSize: 'clamp(40px, 6vw, 72px)',
@@ -209,63 +197,38 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
       color: 'rgba(255, 255, 255, 0.6)',
       margin: '0 0 32px',
     },
-    footer: {
-      padding: '40px 60px',
-      borderTop: '1px solid rgba(255, 255, 255, 0.08)',
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      flexWrap: 'wrap' as const,
-      gap: '20px',
-    },
-    footerText: {
-      fontSize: '14px',
-      color: 'rgba(255, 255, 255, 0.5)',
-      margin: 0,
-    },
-    footerLinks: {
-      display: 'flex',
-      gap: '24px',
-    },
-    footerLink: {
-      fontSize: '14px',
-      color: 'rgba(255, 255, 255, 0.5)',
-      textDecoration: 'none',
-      cursor: 'pointer',
-      transition: 'color 0.2s ease',
-    },
   }
 
   const features = [
     {
-      icon: 'RT',
-      title: 'Real-Time Stock Tracking',
-      description: 'Monitor live price movements with candlestick charts. Stream real-time data for any stock in your watchlist.',
+      icon: 'WS',
+      title: 'WebSocket Streaming',
+      description: 'Live market data via Alpaca WebSocket API with tick-to-candle aggregation and SSE delivery to frontend.',
     },
     {
-      icon: 'BA',
-      title: 'Bank Account Integration',
-      description: 'Connect your bank accounts securely via Open Banking. View all your balances in one unified dashboard.',
+      icon: 'OB',
+      title: 'Open Banking',
+      description: 'GoCardless integration for bank account aggregation. OAuth flow with secure token handling.',
     },
     {
-      icon: 'PA',
-      title: 'Portfolio Analytics',
-      description: 'Track your complete financial picture. See your investments, cash positions, and net worth at a glance.',
+      icon: 'DB',
+      title: 'DuckDB Storage',
+      description: 'Columnar database for efficient OHLCV data storage and fast analytical queries.',
     },
     {
-      icon: 'MN',
-      title: 'Live Market News',
-      description: 'Stay informed with streaming financial news. Get real-time updates on market-moving events.',
+      icon: 'ML',
+      title: 'Regime Detection',
+      description: 'Hidden Markov Model classifying market conditions into 9 volatility/trend regimes.',
     },
     {
-      icon: 'SP',
-      title: 'Secure & Private',
-      description: 'Bank-grade security with encrypted connections. Your financial data stays private and protected.',
+      icon: 'NLP',
+      title: 'Sentiment Analysis',
+      description: 'FinBERT-based sentiment scoring on financial news with Modal serverless inference.',
     },
     {
-      icon: 'LF',
-      title: 'Lightning Fast',
-      description: 'Built for performance with sub-second updates. No lag, no delays - just instant market data.',
+      icon: 'JWT',
+      title: 'Auth & Security',
+      description: 'Supabase authentication with RS256 JWT validation via JWKS endpoint.',
     },
   ]
 
@@ -279,39 +242,28 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
         </div>
         <div style={styles.navButtons}>
           <button
-            style={{ ...styles.navButton, backgroundColor: 'transparent', color: '#ffffff' }}
-            onClick={onGetStarted}
-            onMouseOver={(e) => (e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.1)')}
-            onMouseOut={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-          >
-            Log in
-          </button>
-          <button
             style={{ ...styles.navButton, backgroundColor: theme.primary, color: '#ffffff' }}
             onClick={onGetStarted}
             onMouseOver={(e) => (e.currentTarget.style.backgroundColor = theme.primaryDark)}
             onMouseOut={(e) => (e.currentTarget.style.backgroundColor = theme.primary)}
           >
-            Get Started
+            Launch App
           </button>
         </div>
       </nav>
 
       {/* Hero Section */}
       <section style={styles.hero}>
-        <div style={styles.badge}>
-          <span>Your financial command center</span>
-        </div>
         <h1 style={styles.headline}>
           <span style={styles.gradientText}>Track Stocks.</span>
           <br />
           <span style={styles.gradientText}>Connect Banks.</span>
           <br />
-          <span style={{ color: theme.accent }}>Master Your Finances.</span>
+          <span style={{ color: theme.accent }}>Analyse Markets.</span>
         </h1>
         <p style={styles.subheadline}>
-          Real-time stock tracking, bank account aggregation, and portfolio analytics —
-          all in one powerful, unified platform built for modern investors.
+          A full-stack application featuring live market data streaming,
+          bank account integration via Open Banking, and portfolio tracking.
         </p>
         <div style={styles.ctaGroup}>
           <button
@@ -334,7 +286,7 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
             onMouseOver={(e) => (e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.1)')}
             onMouseOut={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
           >
-            See How It Works
+            View Features
           </button>
         </div>
       </section>
@@ -343,9 +295,9 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
       {/* Features Section */}
       <section id="features" style={styles.section}>
         <div style={styles.sectionHeader}>
-          <h2 style={styles.sectionTitle}>Everything you need</h2>
+          <h2 style={styles.sectionTitle}>Features</h2>
           <p style={styles.sectionSubtitle}>
-            Powerful tools to track, analyze, and optimize your financial life
+            Built with FastAPI, React, WebSockets, and real-time data streaming
           </p>
         </div>
         <div style={styles.featuresGrid}>
@@ -376,9 +328,9 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
 
       {/* CTA Section */}
       <section style={styles.ctaSection}>
-        <h2 style={styles.ctaTitle}>Ready to take control?</h2>
+        <h2 style={styles.ctaTitle}>Try the Demo</h2>
         <p style={styles.ctaSubtitle}>
-          Start tracking your portfolio and market insights today.
+          Explore the platform and see the features in action.
         </p>
         <button
           style={styles.primaryCta}
@@ -392,19 +344,10 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
             e.currentTarget.style.boxShadow = `0 4px 20px ${theme.glow}`
           }}
         >
-          Get Started
+          Launch App
         </button>
       </section>
 
-      {/* Footer */}
-      <footer style={styles.footer}>
-        <p style={styles.footerText}>© 2025 Lucrum Stack. All rights reserved.</p>
-        <div style={styles.footerLinks}>
-          <span style={styles.footerLink}>Privacy Policy</span>
-          <span style={styles.footerLink}>Terms of Service</span>
-          <span style={styles.footerLink}>Contact</span>
-        </div>
-      </footer>
     </div>
   )
 }
