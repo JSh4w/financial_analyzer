@@ -2,12 +2,16 @@
 import { useState, useEffect } from 'react'
 import { Session } from '@supabase/supabase-js'
 import { supabase } from './lib/supabase'
+import LandingPage from './components/LandingPage'
 import Login from './components/Login'
 import Dashboard from './components/Dashboard'
+
+type View = 'landing' | 'login'
 
 function App() {
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
+  const [view, setView] = useState<View>('landing')
 
   useEffect(() => {
     // Check active session on load
@@ -31,13 +35,17 @@ function App() {
     return <div style={{ textAlign: 'center', marginTop: '50px' }}>Loading...</div>
   }
 
-  // If no session -> Show Login
   // If session exists -> Show Dashboard
-  if (!session) {
-    return <Login />
+  if (session) {
+    return <Dashboard />
   }
-  
-  return <Dashboard />
+
+  // No session: show landing page or login based on view state
+  if (view === 'login') {
+    return <Login onBack={() => setView('landing')} />
+  }
+
+  return <LandingPage onGetStarted={() => setView('login')} />
 }
 
 export default App
