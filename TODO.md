@@ -45,8 +45,3 @@ kafka data streaming
 Redis for caching of streams
 Artillery/ Jmeter for analysis
 Prometheus and grafana
-
-
-## Company inspiirations 
-perplexity ai 
-simply wall street
