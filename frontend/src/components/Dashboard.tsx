@@ -8,6 +8,7 @@ import { getAuthToken } from '../lib/auth'
 import SelectBank from './SelectBank'
 import AccountBalances from './AccountBalances'
 import AllBalances from './AllBalances'
+import logoLight from '../assets/LucrumStackLight.jpg'
 
 interface StockData {
   symbol: string
@@ -418,20 +419,17 @@ export default function Dashboard() {
           alignItems: 'center',
           gap: '10px'
         }}>
-          <div style={{
-            width: '32px',
-            height: '32px',
-            backgroundColor: '#3b82f6',
-            borderRadius: '6px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '18px',
-            fontWeight: 'bold'
-          }}>
-            F
-          </div>
-          <span style={{ fontSize: '16px', fontWeight: '600' }}>Finance</span>
+          <img
+            src={logoLight}
+            alt="LucrumStack"
+            style={{
+              width: '32px',
+              height: '32px',
+              borderRadius: '6px',
+              objectFit: 'cover'
+            }}
+          />
+          <span style={{ fontSize: '16px', fontWeight: '600' }}>LucrumStack</span>
         </div>
 
         {/* Navigation Menu */}
