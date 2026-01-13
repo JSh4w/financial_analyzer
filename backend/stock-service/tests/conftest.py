@@ -50,12 +50,16 @@ def db_manager(temp_db_path):
 def client(db_manager):
     """Create FastAPI test client with database"""
     # Import here to avoid circular dependency
+    from app.dependencies import get_db_manager
 
     async def fake_user():
         return "test-user-id"
 
+    def override_db_manager():
+        return db_manager
+
     app.dependency_overrides[get_current_user_id] = fake_user
-    # Import here to avoid circular dependency
+    app.dependency_overrides[get_db_manager] = override_db_manager
 
     # Set the global database manager for the app
     app.state.db_manager = db_manager
@@ -64,3 +68,4 @@ def client(db_manager):
 
     # Cleanup
     app.state.db_manager = None
+    app.dependency_overrides.clear()
