@@ -10,7 +10,7 @@ class TestStockHandler:
         """Test StockHandler creates correctly"""
         handler = StockHandler("AAPL")
         assert handler.symbol == "AAPL"
-        assert handler._ohlcv == {}
+        assert len(handler._ohlcv) == 0
 
     def test_single_trade_processing(self):
         """Test processing a single trade creates initial candle"""
