@@ -3,6 +3,10 @@
 .env.*
 *.env
 
+# Azure deployment configuration - NEVER include in image
+azure-config.txt
+../../azure-config.txt
+
 # Git
 .git
 .gitignore

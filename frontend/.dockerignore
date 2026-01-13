@@ -6,6 +6,10 @@ node_modules
 .env.*
 *.env
 
+# Azure deployment configuration - NEVER include in image
+azure-config.txt
+../azure-config.txt
+
 # Build output (usually rebuilt in container)
 dist
 build
