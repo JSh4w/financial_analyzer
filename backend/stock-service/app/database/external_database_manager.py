@@ -203,6 +203,39 @@ class DatabaseManager:
             logger.error("Failed to get requisitions: %s", e)
             return None
 
+    def get_end_agreement(self, institution_id: str) -> str | None:
+        """Get end agreement URL for an institution"""
+        try:
+            result = (
+                self.client.table("end_agreements")
+                .select("end_agreement_id")
+                .eq("institution_id", institution_id)
+                .single()
+                .execute()
+            )
+            if result.data:
+                return result.data.get("end_agreement_id")
+            return None
+        except Exception as e:
+            logger.error("Failed to get end agreement URL: %s", e)
+            return None
+
+    def store_end_agreement(
+        self, institution_id: str, end_agreement_id: str
+    ) -> dict | None:
+        """Store end agreement URL for an institution"""
+        try:
+            data = {
+                "institution_id": institution_id,
+                "end_agreement_id": end_agreement_id,
+            }
+            result = self.client.table("end_agreements").upsert(data).execute()
+            logger.info("Stored end agreement ID for institution: %s", institution_id)
+            return result.data
+        except Exception as e:
+            logger.error("Failed to store end agreement ID: %s", e)
+            return None
+
     def get_balance_details_for_account(self, account_id: str) -> dict | None:
         """Get stored balance details for a bank account"""
         try:

@@ -1,26 +1,29 @@
 """Banking routes for GoCardless integration"""
-from fastapi import APIRouter, Request, Depends, HTTPException
-import httpx
 
-from app.services.gocardless import GoCardlessClient
+from logging import getLogger
+
+import httpx
 from app.auth import get_current_user_id
 from app.database.external_database_manager import DatabaseManager
 from app.dependencies import (
-    get_supabase_db,
     get_banking_client,
+    get_supabase_db,
 )
+from app.services.gocardless import GoCardlessClient
+from fastapi import APIRouter, Depends, HTTPException
 
-from logging import getLogger 
 logger = getLogger(__name__)
 
 
 banking_router = APIRouter(prefix="/banking")
 
+
 @banking_router.post("/link")
-async def link_bank(client : GoCardlessClient = Depends(get_banking_client)):
+async def link_bank(client: GoCardlessClient = Depends(get_banking_client)):
     """Generate a bank linking URL for the user."""
     url = await client.create_requisition(...)
     return {"url": url}
+
 
 @banking_router.get("/get_token")
 async def get_token(client: GoCardlessClient = Depends(get_banking_client)):
@@ -32,7 +35,7 @@ async def get_token(client: GoCardlessClient = Depends(get_banking_client)):
 @banking_router.get("/me")
 async def get_current_user_info(
     user_id: str = Depends(get_current_user_id),
-    db : DatabaseManager = Depends(get_supabase_db)
+    db: DatabaseManager = Depends(get_supabase_db),
 ):
     """Test endpoint to verify user_id extraction from JWT token"""
     # Try to get user profile
@@ -41,8 +44,9 @@ async def get_current_user_info(
     return {
         "user_id": user_id,
         "profile": profile,
-        "message": "Successfully extracted user_id from JWT token"
+        "message": "Successfully extracted user_id from JWT token",
     }
+
 
 @banking_router.get("/institutions")
 async def list_institutions(client: GoCardlessClient = Depends(get_banking_client)):
@@ -50,6 +54,7 @@ async def list_institutions(client: GoCardlessClient = Depends(get_banking_clien
     institutions = await client.get_institutions()
     # Return the complete list of institutions as provided by the client
     return {"institutions": institutions}
+
 
 @banking_router.post("/requisition")
 async def requisition(
@@ -62,7 +67,15 @@ async def requisition(
     """Create a GoCardless requisition and return the authentication link."""
     try:
         # Create requisition with GoCardless
-        result = await client.create_requisition(redirect_uri, institution_id, user_id)
+        agreement_id = db.get_end_agreement(institution_id)
+        if agreement_id is None:
+            end_user_agreement = await client.create_end_user_agreement(institution_id)
+            agreement_id = end_user_agreement.get("id", None)
+            if agreement_id:
+                db.store_end_agreement(institution_id, agreement_id)
+        result = await client.create_requisition(
+            redirect_uri, institution_id, agreement_id, user_id
+        )
         requisition_id = result["requisition_id"]
         auth_link = result["link"]
 
@@ -71,13 +84,10 @@ async def requisition(
             user_id=user_id,
             requisition_id=requisition_id,
             institution_id=institution_id,
-            reference=result["reference"]
+            reference=result["reference"],
         )
 
-        return {
-            "link": auth_link,
-            "requisition_id": requisition_id
-        }
+        return {"link": auth_link, "requisition_id": requisition_id}
     except httpx.HTTPStatusError as e:
         # Extract error details from the response
         error_detail = str(e)
@@ -85,8 +95,9 @@ async def requisition(
 
         raise HTTPException(
             status_code=status_code,
-            detail=f"Failed to create bank requisition: {error_detail}"
+            detail=f"Failed to create bank requisition: {error_detail}",
         ) from e
+
 
 @banking_router.get("/requisition/{requisition_id}")
 async def get_requisition_status(
@@ -118,8 +129,9 @@ async def get_requisition_status(
         status_code = e.response.status_code if e.response else 500
         raise HTTPException(
             status_code=status_code,
-            detail=f"Failed to retrieve requisition: {error_detail}"
+            detail=f"Failed to retrieve requisition: {error_detail}",
         ) from e
+
 
 @banking_router.get("/all_balances")
 async def get_all_balances(
@@ -160,29 +172,45 @@ async def get_all_balances(
                         account_to_balances[account_id] = []
                         account_to_institution[account_id] = institution_name
                 else:
-                    logger.warning(f"Requisition {requisition_id} is linked but has no accounts")
+                    logger.warning(
+                        f"Requisition {requisition_id} is linked but has no accounts"
+                    )
 
-            elif status in ["GC", "CR", "UA"]:  # Give Consent, Created, or Undergoing Authentication - user needs to authenticate
-                institution_name = await client.get_institution_name(institution_id) if institution_id else "Unknown"
-                pending_requisitions.append({
-                    "requisition_id": requisition_id,
-                    "institution_id": institution_id,
-                    "institution_name": institution_name,
-                    "status": status,
-                    "link": requisition_details.get("link"),
-                    "message": "Please complete authentication by visiting the link"
-                })
+            elif (
+                status in ["GC", "CR", "UA"]
+            ):  # Give Consent, Created, or Undergoing Authentication - user needs to authenticate
+                institution_name = (
+                    await client.get_institution_name(institution_id)
+                    if institution_id
+                    else "Unknown"
+                )
+                pending_requisitions.append(
+                    {
+                        "requisition_id": requisition_id,
+                        "institution_id": institution_id,
+                        "institution_name": institution_name,
+                        "status": status,
+                        "link": requisition_details.get("link"),
+                        "message": "Please complete authentication by visiting the link",
+                    }
+                )
             else:
                 # Other statuses (EX - Expired, RJ - Rejected, etc.)
                 logger.warning(f"Requisition {requisition_id} has status {status}")
-                institution_name = await client.get_institution_name(institution_id) if institution_id else "Unknown"
-                pending_requisitions.append({
-                    "requisition_id": requisition_id,
-                    "institution_id": institution_id,
-                    "institution_name": institution_name,
-                    "status": status,
-                    "message": f"Requisition status: {status}"
-                })
+                institution_name = (
+                    await client.get_institution_name(institution_id)
+                    if institution_id
+                    else "Unknown"
+                )
+                pending_requisitions.append(
+                    {
+                        "requisition_id": requisition_id,
+                        "institution_id": institution_id,
+                        "institution_name": institution_name,
+                        "status": status,
+                        "message": f"Requisition status: {status}",
+                    }
+                )
 
         # Fetch balances for all unique accounts in one go (deduplicated)
         accounts_list = list(account_to_balances.keys())
@@ -196,16 +224,24 @@ async def get_all_balances(
 
                 if account_balance and not db.can_refresh_balance(account):
                     # Use cached data - rate limit still active
-                    logger.info(f"Using cached balance for account {account} (rate limit active)")
-                    account_to_balances[account].extend(account_balance.get("balances", []))
+                    logger.info(
+                        f"Using cached balance for account {account} (rate limit active)"
+                    )
+                    account_to_balances[account].extend(
+                        account_balance.get("balances", [])
+                    )
                 else:
                     # Need to fetch fresh data (no cache or can refresh)
                     needs_refresh.append(account)
 
             # Fetch fresh data for accounts that need it
             if needs_refresh:
-                logger.info(f"Fetching fresh balances for {len(needs_refresh)} accounts")
-                fresh_balance_information = await client.get_balance_from_accounts(needs_refresh)
+                logger.info(
+                    f"Fetching fresh balances for {len(needs_refresh)} accounts"
+                )
+                fresh_balance_information = await client.get_balance_from_accounts(
+                    needs_refresh
+                )
 
                 for balance_info in fresh_balance_information:
                     account_id = balance_info.get("account_id")
@@ -218,12 +254,16 @@ async def get_all_balances(
                         user_id=user_id,
                         account_id=account_id,
                         balances=balance_info.get("balances", []),
-                        rate_limit_reset_seconds=balance_info.get("rate_limit_reset_seconds"),
+                        rate_limit_reset_seconds=balance_info.get(
+                            "rate_limit_reset_seconds"
+                        ),
                         rate_limit_remaining=balance_info.get("rate_limit_remaining"),
                     )
 
                     # Add to response
-                    account_to_balances[account_id].extend(balance_info.get("balances", []))
+                    account_to_balances[account_id].extend(
+                        balance_info.get("balances", [])
+                    )
 
         # Group balances by institution name instead of account_id
         institution_to_balances = {}
@@ -235,7 +275,7 @@ async def get_all_balances(
 
         return {
             "balances": institution_to_balances,
-            "pending_requisitions": pending_requisitions
+            "pending_requisitions": pending_requisitions,
         }
     except httpx.HTTPStatusError as e:
         error_detail = str(e)
@@ -243,5 +283,5 @@ async def get_all_balances(
 
         raise HTTPException(
             status_code=status_code,
-            detail=f"Failed to retrieve balances: {error_detail}"
+            detail=f"Failed to retrieve balances: {error_detail}",
         ) from e

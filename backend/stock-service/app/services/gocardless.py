@@ -1,22 +1,27 @@
 """GoCardless API client for handling user authentication and data retrieval."""
-from datetime import datetime, timedelta
-from typing import List
-import httpx
-import uuid
 
+import uuid
+from datetime import datetime, timedelta
 from logging import getLogger
+from typing import List
+
+import httpx
+
 logger = getLogger(__name__)
+
 
 class GoCardlessClient:
     """
     GoCardless class for getting user information
     Handles token creation and usage
     """
+
     def __init__(
-            self, secret_id: str, 
-            secret_key: str,
-            http_client: httpx.AsyncClient | None = None
-        ):
+        self,
+        secret_id: str,
+        secret_key: str,
+        http_client: httpx.AsyncClient | None = None,
+    ):
         self.secret_id = secret_id
         self.secret_key = secret_key
         self.client: httpx.AsyncClient | None = http_client
@@ -26,10 +31,12 @@ class GoCardlessClient:
         self.access_expires: datetime | None = None
 
     async def get_token(self) -> str:
-        " Get valid access token, refreshing or creating as needed."
+        "Get valid access token, refreshing or creating as needed."
         # Buffer of 60 seconds before expiry
         # short temp token
-        if self.access_token and self.access_expires > datetime.now() + timedelta(seconds=60):
+        if self.access_token and self.access_expires > datetime.now() + timedelta(
+            seconds=60
+        ):
             return self.access_token
 
         # user longer refresh token
@@ -44,36 +51,31 @@ class GoCardlessClient:
     async def _new_token(self) -> None:
         # POST /api/v2/token/new/ with secret_id/key
         response = await self.client.post(
-                "/api/v2/token/new/",
-                headers={"Content-Type": "application/json"},
-                json={
-                    "secret_id": self.secret_id,
-                    "secret_key": self.secret_key
-                }
-            )
+            "/api/v2/token/new/",
+            headers={"Content-Type": "application/json"},
+            json={"secret_id": self.secret_id, "secret_key": self.secret_key},
+        )
         response.raise_for_status()
         data = response.json()
         self.access_token = data["access"]
         self.refresh_token = data["refresh"]
-        self.refresh_expires = datetime.now() + timedelta(seconds=data["refresh_expires"])
+        self.refresh_expires = datetime.now() + timedelta(
+            seconds=data["refresh_expires"]
+        )
         self.access_expires = datetime.now() + timedelta(seconds=data["access_expires"])
 
     async def _refresh(self) -> None:
         # POST /api/v2/token/refresh/ with refresh_token
         response = await self.client.post(
             "/api/v2/token/refresh/",
-            headers={
-                "Content-Type": "application/json"
-            },
-            json={
-                "refresh": self.refresh_token
-            }
+            headers={"Content-Type": "application/json"},
+            json={"refresh": self.refresh_token},
         )
         response.raise_for_status()
         data = response.json()
         self.access_token = data["access"]
         self.access_expires = datetime.now() + timedelta(seconds=data["access_expires"])
-    
+
     async def get_institutions(self) -> List[dict]:
         """Returns list of available institutions."""
         token = await self.get_token()
@@ -113,10 +115,42 @@ class GoCardlessClient:
             data = response.json()
             return data.get("name", institution_id)
         except Exception as e:
-            logger.warning("Failed to get institution name for %s: %s", institution_id, e)
+            logger.warning(
+                "Failed to get institution name for %s: %s", institution_id, e
+            )
             return institution_id
 
-    async def create_requisition(self, redirect_uri: str, institution_id: str, user_id: str | None = None) -> dict:
+    async def create_end_user_agreement(self, institution_id: str) -> dict:
+        """Creates an end user agreement for the given user ID."""
+        token = await self.get_token()
+        try:
+            response = await self.client.post(
+                "/api/v2/agreements/enduser/",
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {token}",
+                },
+                json={
+                    "institution_id": institution_id,
+                    "max_historical_days": "7",
+                    "access_valid_for_days": "7",
+                    "access_scope": ["balances", "details", "transactions"],
+                    "reconfirmation": "false",
+                },
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPStatusError as e:
+            logger.error("Status %s : %s", e.response.status_code, e.response.text)
+            return {}
+
+    async def create_requisition(
+        self,
+        redirect_uri: str,
+        institution_id: str,
+        agreement: str | None = None,
+        user_id: str | None = None,
+    ) -> dict:
         """Creates a requisition and returns the authorization link and requisition ID."""
         token = await self.get_token()
         reference = str(uuid.uuid4())
@@ -126,12 +160,15 @@ class GoCardlessClient:
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {token}",
             },
-            json={
-                "redirect": redirect_uri,
-                "institution_id": institution_id,
-                "reference": reference or user_id or "anonymous",
-                "user_language": "EN",
-            }
+            json=self.compact(
+                {
+                    "redirect": redirect_uri,
+                    "institution_id": institution_id,
+                    "reference": reference or user_id or "anonymous",
+                    "agreement": agreement,
+                    "user_language": "EN",
+                }
+            ),
         )
 
         if response.status_code != 201:
@@ -139,16 +176,15 @@ class GoCardlessClient:
             raise httpx.HTTPStatusError(
                 f"GoCardless API error: {error_detail}",
                 request=response.request,
-                response=response
+                response=response,
             )
 
         data = response.json()
         return {
             "requisition_id": data["id"],
             "link": data["link"],
-            "reference": reference
+            "reference": reference,
         }
-
 
     async def get_requisition_details(self, requisition_id: str) -> dict:
         """Get full requisition details including status and link"""
@@ -179,11 +215,13 @@ class GoCardlessClient:
                 # Extract rate limit info from headers
                 rate_limit_reset = int(
                     response.headers.get("http_x_ratelimit_account_success_reset", 0)
-                    )
+                )
                 rate_limit_remaining = int(
-                    response.headers.get("http_x_ratelimit_account_success_remaining", 0)
+                    response.headers.get(
+                        "http_x_ratelimit_account_success_remaining", 0
                     )
-                #return all balance information including account_id
+                )
+                # return all balance information including account_id
                 data["account_id"] = account_id
                 data["rate_limit_reset_seconds"] = rate_limit_reset
                 data["rate_limit_remaining"] = rate_limit_remaining
@@ -204,23 +242,34 @@ class GoCardlessClient:
                             message = f"Rate limit exceeded. Please try again in {wait_hours:.1f} hours."
                         else:
                             message = f"Rate limit exceeded. Please try again in {wait_minutes:.0f} minutes."
-                        logger.error(f"Rate limited (429). Retry after {wait_seconds} seconds")
+                        logger.error(
+                            f"Rate limited (429). Retry after {wait_seconds} seconds"
+                        )
                     else:
                         message = "Rate limit exceeded. Please try again in 1 hour."
-                        logger.error(f"Rate limited (429). No Retry-After header, assuming 1 hour")
+                        logger.error(
+                            "Rate limited (429). No Retry-After header, assuming 1 hour"
+                        )
 
                     # Create a more user-friendly error
                     from httpx import HTTPStatusError
+
                     raise HTTPStatusError(
-                        message,
-                        request=e.request,
-                        response=e.response
+                        message, request=e.request, response=e.response
                     )
                 else:
-                    logger.error(f"Error fetching balance for account {account_id}: {e}")
+                    logger.error(
+                        f"Error fetching balance for account {account_id}: {e}"
+                    )
                     raise
             except Exception as e:
-                logger.error(f"Unexpected error fetching balance for account {account_id}: {e}")
+                logger.error(
+                    f"Unexpected error fetching balance for account {account_id}: {e}"
+                )
                 raise
 
         return balances
+
+    @staticmethod
+    def compact(dict) -> dict:
+        return {k: v for k, v in dict.items() if v is not None}
