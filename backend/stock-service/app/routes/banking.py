@@ -194,8 +194,13 @@ async def get_all_balances(
                         "message": "Please complete authentication by visiting the link",
                     }
                 )
+            elif status in ["EX", "RJ"]:  # Expired or Rejected - delete from database
+                logger.info(
+                    f"Deleting {status} requisition {requisition_id} from database"
+                )
+                db.delete_requisition(requisition_id)
             else:
-                # Other statuses (EX - Expired, RJ - Rejected, etc.)
+                # Other statuses - log but keep for now
                 logger.warning(f"Requisition {requisition_id} has status {status}")
                 institution_name = (
                     await client.get_institution_name(institution_id)

@@ -203,6 +203,21 @@ class DatabaseManager:
             logger.error("Failed to get requisitions: %s", e)
             return None
 
+    def delete_requisition(self, requisition_id: str) -> bool:
+        """Delete a bank requisition by requisition_id"""
+        try:
+            result = (
+                self.client.table("bank_requisitions")
+                .delete()
+                .eq("requisition_id", requisition_id)
+                .execute()
+            )
+            logger.info("Deleted requisition: %s", requisition_id)
+            return True
+        except Exception as e:
+            logger.error("Failed to delete requisition: %s", e)
+            return False
+
     def get_end_agreement(self, institution_id: str) -> str | None:
         """Get end agreement URL for an institution"""
         try:
