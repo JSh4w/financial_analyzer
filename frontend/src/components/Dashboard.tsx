@@ -30,7 +30,8 @@ interface StockSubscription {
   stockData: StockData | null
   status: 'loading' | 'streaming' | 'paused' | 'error'
   errorMessage?: string
-  isSubscribed: boolean
+  isSubscribed: boolean  // Temporary WebSocket subscription (ws_manager)
+  isPermanent: boolean   // Permanent database subscription (persisted)
 }
 
 type View = 'stocks' | 'portfolio'
@@ -45,6 +46,7 @@ export default function Dashboard() {
   const [globalStatus, setGlobalStatus] = useState('')
   const [bankConnectionStatus, setBankConnectionStatus] = useState<'idle' | 'success' | 'error'>('idle')
   const [bankConnectionMessage, setBankConnectionMessage] = useState('')
+  const [subscriptionsLoaded, setSubscriptionsLoaded] = useState(false)
   const eventSourcesRef = useRef<Map<string, EventSource>>(new Map())
 
   const BACKEND_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001'
@@ -206,7 +208,8 @@ export default function Dashboard() {
       eventSource: null,
       stockData: null,
       status: 'loading',
-      isSubscribed: false
+      isSubscribed: false,
+      isPermanent: false
     }))
 
     setGlobalStatus(`Subscribing to ${upperSymbol}...`)
@@ -336,19 +339,24 @@ export default function Dashboard() {
 
   const removeStock = async (symbol: string) => {
     const upperSymbol = symbol.toUpperCase()
+    const stock = activeStocks.get(upperSymbol)
+
+    // If permanent subscription, remove from database first
+    if (stock?.isPermanent) {
+      try {
+        await apiClient.delete(`/api/subscribe/${upperSymbol}`)
+      } catch (error) {
+        console.error(`Error removing permanent subscription for ${upperSymbol}:`, error)
+      }
+    }
 
     // Close EventSource connection
+    // Backend will automatically check if WebSocket should be unsubscribed
+    // (based on remaining SSE connections + permanent subscribers)
     const eventSource = eventSourcesRef.current.get(upperSymbol)
     if (eventSource) {
       eventSource.close()
       eventSourcesRef.current.delete(upperSymbol)
-    }
-
-    // Unsubscribe from backend
-    try {
-      await apiClient.get(`/ws_manager/close/${upperSymbol}`)
-    } catch (error) {
-      console.error(`Error unsubscribing from ${upperSymbol}:`, error)
     }
 
     // Remove from active stocks
@@ -376,12 +384,226 @@ export default function Dashboard() {
     setGlobalStatus(`Removed ${upperSymbol}`)
   }
 
+  // Permanent subscription functions
+  const addPermanentSubscription = async (symbol: string) => {
+    const upperSymbol = symbol.toUpperCase().trim()
+
+    try {
+      const result = await apiClient.post<{
+        status: string
+        symbol: string
+        subscriber_count: number
+        message: string
+      }>(`/api/subscribe/${upperSymbol}`)
+
+      if (result.status === 'subscribed') {
+        setActiveStocks(prev => {
+          const updated = new Map(prev)
+          const stock = updated.get(upperSymbol)
+          if (stock) {
+            stock.isPermanent = true
+          }
+          return updated
+        })
+        setGlobalStatus(`${upperSymbol} added to watchlist`)
+      }
+    } catch (error) {
+      console.error(`Error adding permanent subscription for ${upperSymbol}:`, error)
+      setGlobalStatus(`Failed to add ${upperSymbol} to watchlist`)
+    }
+  }
+
+  const removePermanentSubscription = async (symbol: string) => {
+    const upperSymbol = symbol.toUpperCase().trim()
+
+    try {
+      const result = await apiClient.delete<{
+        status: string
+        symbol: string
+        remaining_subscribers: number
+        message: string
+      }>(`/api/subscribe/${upperSymbol}`)
+
+      if (result.status === 'unsubscribed') {
+        setActiveStocks(prev => {
+          const updated = new Map(prev)
+          const stock = updated.get(upperSymbol)
+          if (stock) {
+            stock.isPermanent = false
+          }
+          return updated
+        })
+        setGlobalStatus(`${upperSymbol} removed from watchlist`)
+      }
+    } catch (error) {
+      console.error(`Error removing permanent subscription for ${upperSymbol}:`, error)
+      setGlobalStatus(`Failed to remove ${upperSymbol} from watchlist`)
+    }
+  }
+
   const handleViewStock = () => {
     if (searchSymbol.trim()) {
       addStock(searchSymbol)
       setSearchSymbol('') // Clear search after adding
     }
   }
+
+  // Load permanent subscriptions when stocks view is active
+  useEffect(() => {
+    // Only load when stocks view is active and not already loaded
+    if (currentView !== 'stocks' || subscriptionsLoaded) {
+      return
+    }
+
+    const loadPermanentSubscriptions = async () => {
+      try {
+        const result = await apiClient.get<{
+          symbols: string[]
+          count: number
+        }>('/api/subscriptions')
+
+        if (result.symbols && result.symbols.length > 0) {
+          setGlobalStatus(`Loading ${result.count} saved stocks...`)
+
+          // Add each saved symbol sequentially
+          for (const symbol of result.symbols) {
+            // Initialize stock subscription
+            setActiveStocks(prev => {
+              if (prev.has(symbol)) return prev
+              return new Map(prev).set(symbol, {
+                symbol,
+                eventSource: null,
+                stockData: null,
+                status: 'loading',
+                isSubscribed: false,
+                isPermanent: true  // Mark as permanent since it's from the watchlist
+              })
+            })
+
+            try {
+              // Subscribe via WebSocket manager
+              const wsResult = await apiClient.get<{
+                status: string
+                message?: string
+                symbol?: string
+              }>(`/ws_manager/${symbol}`)
+
+              if (wsResult.status !== 'subscribed') {
+                setActiveStocks(prev => {
+                  const updated = new Map(prev)
+                  const stock = updated.get(symbol)
+                  if (stock) {
+                    stock.status = 'error'
+                    stock.errorMessage = wsResult.message || 'Subscription failed'
+                  }
+                  return updated
+                })
+                continue
+              }
+
+              // Mark as subscribed
+              setActiveStocks(prev => {
+                const updated = new Map(prev)
+                const stock = updated.get(symbol)
+                if (stock) {
+                  stock.isSubscribed = true
+                }
+                return updated
+              })
+
+              // Start SSE streaming
+              const token = await getAuthToken()
+              if (!token) throw new Error('Not authenticated')
+
+              const eventSource = new EventSource(`${BACKEND_URL}/stream/${symbol}?token=${token}`)
+              eventSourcesRef.current.set(symbol, eventSource)
+
+              eventSource.onopen = () => {
+                setActiveStocks(prev => {
+                  const updated = new Map(prev)
+                  const stock = updated.get(symbol)
+                  if (stock) {
+                    stock.status = 'streaming'
+                    stock.eventSource = eventSource
+                  }
+                  return updated
+                })
+              }
+
+              eventSource.onmessage = (event) => {
+                try {
+                  const data: StockData = JSON.parse(event.data)
+                  setActiveStocks(prev => {
+                    const updated = new Map(prev)
+                    const stock = updated.get(symbol)
+                    if (!stock) return prev
+
+                    if ((data as any).is_initial) {
+                      stock.stockData = data
+                    } else {
+                      stock.stockData = {
+                        ...data,
+                        candles: {
+                          ...(stock.stockData?.candles || {}),
+                          ...data.candles
+                        },
+                        update_timestamp: data.update_timestamp || new Date().toISOString()
+                      }
+                    }
+                    return updated
+                  })
+                } catch (error) {
+                  console.error(`Error parsing SSE data for ${symbol}:`, error)
+                }
+              }
+
+              eventSource.onerror = (error) => {
+                console.error(`SSE Error for ${symbol}:`, error)
+                setActiveStocks(prev => {
+                  const updated = new Map(prev)
+                  const stock = updated.get(symbol)
+                  if (stock) {
+                    stock.status = 'error'
+                    stock.errorMessage = 'Stream connection error'
+                  }
+                  return updated
+                })
+              }
+
+              // Select the first stock
+              setActiveStocks(prev => {
+                if (prev.size === 1) {
+                  setSelectedStock(symbol)
+                }
+                return prev
+              })
+
+            } catch (error) {
+              console.error(`Error subscribing to ${symbol}:`, error)
+              setActiveStocks(prev => {
+                const updated = new Map(prev)
+                const stock = updated.get(symbol)
+                if (stock) {
+                  stock.status = 'error'
+                  stock.errorMessage = String(error)
+                }
+                return updated
+              })
+            }
+          }
+
+          setGlobalStatus(`Loaded ${result.count} saved stocks`)
+        }
+
+        setSubscriptionsLoaded(true)
+      } catch (error) {
+        console.error('Failed to load permanent subscriptions:', error)
+        setSubscriptionsLoaded(true) // Mark as loaded to prevent infinite retries
+      }
+    }
+
+    loadPermanentSubscriptions()
+  }, [currentView, subscriptionsLoaded, BACKEND_URL])
 
   useEffect(() => {
     // Cleanup: close all EventSource connections on unmount
@@ -505,8 +727,11 @@ export default function Dashboard() {
                 }}
               >
                 <div>
-                  <div style={{ fontSize: '12px', fontWeight: '300', color: '#e0e0e0' }}>
+                  <div style={{ fontSize: '12px', fontWeight: '300', color: '#e0e0e0', display: 'flex', alignItems: 'center', gap: '4px' }}>
                     {symbol}
+                    {stock.isPermanent && (
+                      <span title="Saved to watchlist" style={{ color: '#3b82f6', fontSize: '10px' }}>★</span>
+                    )}
                   </div>
                   <div style={{ fontSize: '12px', color: '#666', marginTop: '2px' }}>
                     {stock.status === 'streaming' && '🔴 Live'}
@@ -767,6 +992,26 @@ export default function Dashboard() {
                         )}
                       </div>
                     </div>
+                    {/* Subscribe/Unsubscribe button for permanent watchlist */}
+                    <button
+                      onClick={() => subscription.isPermanent
+                        ? removePermanentSubscription(subscription.symbol)
+                        : addPermanentSubscription(subscription.symbol)
+                      }
+                      style={{
+                        padding: '10px 20px',
+                        fontSize: '14px',
+                        fontWeight: '500',
+                        backgroundColor: subscription.isPermanent ? 'transparent' : '#3b82f6',
+                        color: subscription.isPermanent ? '#ef4444' : '#ffffff',
+                        border: subscription.isPermanent ? '1px solid #ef4444' : 'none',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s'
+                      }}
+                    >
+                      {subscription.isPermanent ? 'Remove from Watchlist' : 'Add to Watchlist'}
+                    </button>
                   </div>
 
                   {subscription.status === 'error' && (
