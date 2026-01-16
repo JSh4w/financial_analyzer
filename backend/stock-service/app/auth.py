@@ -1,43 +1,45 @@
 """JWT authentication utilities for validating Supabase tokens"""
 
-from typing import Optional, Union, Dict, Any, List
+from typing import Any, Dict, List, Optional, Union
 
 import jwt
-from jwt import PyJWKClient
+from app.config import Settings
 from fastapi import HTTPException, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from jwt import PyJWKClient
 from pydantic import BaseModel
-
-from app.config import Settings
 
 settings = Settings()
 security = HTTPBearer()
-security_optional = HTTPBearer(auto_error=False)  # For optional auth (doesn't raise error)
+security_optional = HTTPBearer(
+    auto_error=False
+)  # For optional auth (doesn't raise error)
 
-# Initialize JWKS client for secure RS256 verification
+# Initialize JWKS client for secure RS256/ES256 verification
 # Falls back to HS256 if JWKS URL is not configured (legacy support)
 jwks_client = None
-if hasattr(settings, 'SUPABASE_JWKS_URL') and settings.SUPABASE_JWKS_URL:
+if hasattr(settings, "SUPABASE_JWKS_URL") and settings.SUPABASE_JWKS_URL:
     jwks_client = PyJWKClient(settings.SUPABASE_JWKS_URL, cache_keys=True)
 
 
 class TokenPayload(BaseModel):
     """JWT token payload from Supabase (essential fields only)"""
-    sub: str                           # User ID - for DB queries
-    email: str                         # Email - for display/logging
-    role: str                          # Role - for authorization
+
+    sub: str  # User ID - for DB queries
+    email: str  # Email - for display/logging
+    role: str  # Role - for authorization
 
     # Fields for validation
-    iss: str                           # Issuer - verify it's Supabase
-    aud: Union[str, List[str]]        # Audience - verify it's "authenticated"
-    exp: int                           # Expiration - automatic validation
-    iat: int                           # Issued at - for logging
+    iss: str  # Issuer - verify it's Supabase
+    aud: Union[str, List[str]]  # Audience - verify it's "authenticated"
+    exp: int  # Expiration - automatic validation
+    iat: int  # Issued at - for logging
 
     # Nice-to-have fields
-    session_id: Optional[str] = None   # Session tracking
-    aal: Optional[str] = None          # Auth level (aal1, aal2)
-    phone: Optional[str] = None        # Phone if available
-    is_anonymous: Optional[bool] = None # Anonymous user check
+    session_id: Optional[str] = None  # Session tracking
+    aal: Optional[str] = None  # Auth level (aal1, aal2)
+    phone: Optional[str] = None  # Phone if available
+    is_anonymous: Optional[bool] = None  # Anonymous user check
 
     # Advanced (only if you use custom metadata)
     app_metadata: Optional[Dict[str, Any]] = None
@@ -72,7 +74,7 @@ def decode_jwt_token(token: str) -> TokenPayload:
                 signing_key.key,
                 algorithms=["RS256", "ES256"],  # Allow both RSA and Elliptic Curve
                 audience="authenticated",
-                options={"verify_aud": True, "verify_exp": True}
+                options={"verify_aud": True, "verify_exp": True},
             )
 
         # Method 2: HS256 with shared secret (LEGACY - Not Recommended)
@@ -84,30 +86,25 @@ def decode_jwt_token(token: str) -> TokenPayload:
                 settings.SUPABASE_JWT_SECRET,
                 algorithms=["HS256"],
                 audience="authenticated",
-                options={"verify_aud": True, "verify_exp": True}
+                options={"verify_aud": True, "verify_exp": True},
             )
 
         return TokenPayload(**payload)
 
     except jwt.ExpiredSignatureError as e:
-        raise HTTPException(
-            status_code=401,
-            detail="Token has expired"
-        ) from e
+        raise HTTPException(status_code=401, detail="Token has expired") from e
     except jwt.InvalidTokenError as e:
         raise HTTPException(
-            status_code=401,
-            detail="Invalid authentication token"
+            status_code=401, detail="Invalid authentication token"
         ) from e
     except Exception as e:
         raise HTTPException(
-            status_code=401,
-            detail=f"Authentication failed: {str(e)}"
+            status_code=401, detail=f"Authentication failed: {str(e)}"
         ) from e
 
 
 def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Security(security)
+    credentials: HTTPAuthorizationCredentials = Security(security),
 ) -> TokenPayload:
     """
     FastAPI dependency to get the current authenticated user from JWT token
@@ -131,7 +128,7 @@ def get_current_user(
 
 
 def get_current_user_id(
-    credentials: HTTPAuthorizationCredentials = Security(security)
+    credentials: HTTPAuthorizationCredentials = Security(security),
 ) -> str:
     """
     FastAPI dependency to get just the user ID (simpler than full token payload)
@@ -153,7 +150,7 @@ def get_current_user_id(
 
 # Optional: Dependency for optional authentication (doesn't raise error if no token)
 def get_optional_user(
-    credentials: Optional[HTTPAuthorizationCredentials] = Security(security_optional)
+    credentials: Optional[HTTPAuthorizationCredentials] = Security(security_optional),
 ) -> Optional[TokenPayload]:
     """
     FastAPI dependency for optional authentication
