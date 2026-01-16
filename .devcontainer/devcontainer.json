@@ -48,7 +48,11 @@
 			"ms-python.pylint",
 			"EricSia.pythonsnippets3",
 			"tamasfe.even-better-toml",
-			"charliermarsh.ruff"
+			"charliermarsh.ruff",
+			"ms-vscode.azure-account",
+			"ms-azuretools.vscode-azureresourcegroups",
+			"ms-azuretools.vscode-azurefunctions",
+			"anthropic.claude-code"
 		]
 	  }
 	},
