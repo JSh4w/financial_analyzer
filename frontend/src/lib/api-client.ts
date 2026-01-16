@@ -17,10 +17,11 @@ class ApiClient {
   }
 
   private async getAuthToken(): Promise<string | null> {
-    const { data: { session } } = await supabase.auth.getSession()
+    const { data: { session }, error } = await supabase.auth.getSession()
+    console.log('getAuthToken:', { session, error })
     return session?.access_token || null
   }
-
+  
   private async request<T>(
     endpoint: string,
     options: RequestOptions = {}
