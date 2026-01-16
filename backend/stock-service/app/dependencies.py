@@ -6,6 +6,7 @@ from app.stocks.data_aggregator import TradeDataAggregator
 from app.stocks.subscription_manager import SubscriptionManager
 from app.database.stock_data_manager import StockDataManager
 from app.database.external_database_manager import DatabaseManager
+from app.database.subscription_manager import PersistentSubscriptionManager
 
 
 # Dependency injection functions
@@ -40,3 +41,7 @@ def get_banking_client(request: Request) -> GoCardlessClient:
 def get_supabase_db(request: Request) -> DatabaseManager:
     """Get Supabase database manager from state"""
     return request.state.supabase_db
+
+def get_persistent_subscription_manager(request: Request) -> PersistentSubscriptionManager:
+    """Get persistent subscription manager from state"""
+    return request.state.persistent_subscription_manager
