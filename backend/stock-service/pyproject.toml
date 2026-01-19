@@ -24,6 +24,7 @@ modal = "^1.2.0"
 pyjwt = "^2.10.1"
 cryptography = "^46.0.3"
 supabase = "^2.27.0"
+alpaca-py = "^0.43.2"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"
