@@ -57,6 +57,7 @@
 	  }
 	},
 
+   "postCreateCommand": "sudo apt-get update && sudo apt-get install -y cmake",
    "postStartCommand": "npm install -g @anthropic-ai/claude-code; npm install -g @google/gemini-cli@latest"
 
 }
