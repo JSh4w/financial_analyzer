@@ -1,9 +1,9 @@
-#ifndef HMM_HPP
-#define HMM_HPP
+#pragma once 
 
 #include <vector>
 #include <array>
 #include <string>
+#include <cmath>
 
 
 /**
@@ -50,8 +50,11 @@ private:
     // Feeding observations of log returns = std::log(prices[t]/ prices[t-1])
     // returns are scale invariant 
     std::vector<std::array<double, N>> forward(const std::vector<double>& obs) const;
-    std::vector<std::array<double, N>> backward(const std::vector<doubel>& obs) const;
+    std::vector<std::array<double, N>> backward(const std::vector<double>& obs) const;
     double emission(double x, int state) const;
 
+
+    // we also need pi 
+    double pi = std::acos(-1);
 
 };
