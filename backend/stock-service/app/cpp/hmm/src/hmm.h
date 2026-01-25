@@ -4,7 +4,7 @@
 #include <array>
 #include <string>
 #include <cmath>
-
+#include <numbers>
 
 /**
     Hidden Markov Model with Student-t emissions for regime detection on returns
@@ -14,8 +14,8 @@ public:
     // No Parameter as fixed type
     HMM();
 
-    // Training, to adjust parameter values 
-    void fit();
+    // Training, to adjust parameter values using Baum-Welch (EM algorithm)
+    void fit(const std::vector<double>& observations, int max_iterations = 100, double tolerance = 1e-4);
 
     // Inference
     std::vector<int> decode(const std::vector<double>& observations ) const;
@@ -55,6 +55,6 @@ private:
 
 
     // we also need pi 
-    double pi = std::acos(-1);
+    double pi = std::numbers::pi;
 
 };
