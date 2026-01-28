@@ -63,7 +63,7 @@ std::vector<std::array<double, HMM::N>> HMM::forward(
     // compute a(t,i) = P(observations[0:t], state[t]=i)
     //observatiions obs len T, 
     //forward[s,1] <- pi_s * b_s(o_a)
-    int T = obs.size();
+    size_t T = obs.size();
     std::vector<std::array<double, N>> alpha(T);
     // The std array is for each possible state in a column of the trellace
     // THe vector is the lenght of the number of sequences
