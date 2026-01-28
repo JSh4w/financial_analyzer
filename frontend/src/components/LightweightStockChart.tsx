@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { createChart, CandlestickSeries, HistogramSeries, type IChartApi, type CandlestickData, type Time } from 'lightweight-charts';
+import { colors, borderRadius, typography } from '../theme';
 
 interface CandleData {
   open: number;
@@ -39,21 +40,21 @@ const LightweightStockChart: React.FC<LightweightStockChartProps> = ({ symbol, c
       width: chartContainerRef.current.clientWidth,
       height: 600,
       layout: {
-        background: { color: '#1a1a1a' },
-        textColor: '#d1d4dc',
+        background: { color: colors.bg.secondary },
+        textColor: colors.text.secondary,
       },
       grid: {
-        vertLines: { color: '#2B2B43' },
-        horzLines: { color: '#2B2B43' },
+        vertLines: { color: colors.border.subtle },
+        horzLines: { color: colors.border.subtle },
       },
       crosshair: {
         mode: 1, // Normal crosshair
       },
       rightPriceScale: {
-        borderColor: '#2B2B43',
+        borderColor: colors.border.default,
       },
       timeScale: {
-        borderColor: '#2B2B43',
+        borderColor: colors.border.default,
         timeVisible: true,
         secondsVisible: false,
       },
@@ -63,19 +64,19 @@ const LightweightStockChart: React.FC<LightweightStockChartProps> = ({ symbol, c
 
     // Add candlestick series (Lightweight Charts v5 - use imported series class)
     const candlestickSeries = chart.addSeries(CandlestickSeries, {
-      upColor: '#4CAF50',
-      downColor: '#f44336',
-      borderUpColor: '#4CAF50',
-      borderDownColor: '#f44336',
-      wickUpColor: '#4CAF50',
-      wickDownColor: '#f44336',
+      upColor: colors.chart.up,
+      downColor: colors.chart.down,
+      borderUpColor: colors.chart.up,
+      borderDownColor: colors.chart.down,
+      wickUpColor: colors.chart.up,
+      wickDownColor: colors.chart.down,
     });
 
     candlestickSeriesRef.current = candlestickSeries;
 
     // Add volume series (Lightweight Charts v5 - use imported series class)
     const volumeSeries = chart.addSeries(HistogramSeries, {
-      color: '#26a69a',
+      color: colors.chart.volume,
       priceFormat: {
         type: 'volume',
       },
@@ -157,7 +158,7 @@ const LightweightStockChart: React.FC<LightweightStockChartProps> = ({ symbol, c
 
       // Color volume bars based on price movement
       const isGreen = candle.close >= candle.open;
-      const color = isGreen ? 'rgba(76, 175, 80, 0.5)' : 'rgba(244, 67, 54, 0.5)';
+      const color = isGreen ? 'rgba(34, 197, 94, 0.4)' : 'rgba(239, 68, 68, 0.4)';
 
       return {
         time,
@@ -184,19 +185,18 @@ const LightweightStockChart: React.FC<LightweightStockChartProps> = ({ symbol, c
     <div>
       <div
         style={{
-          marginBottom: '10px',
-          padding: '10px',
-          backgroundColor: '#1a1a1a',
-          borderRadius: '8px 8px 0 0',
-          border: '1px solid #444',
-          borderBottom: 'none',
+          marginBottom: 0,
+          padding: '12px 16px',
+          backgroundColor: colors.bg.secondary,
+          borderRadius: `${borderRadius.lg} ${borderRadius.lg} 0 0`,
+          borderBottom: `1px solid ${colors.border.default}`,
         }}
       >
-        <h3 style={{ margin: 0, color: '#61dafb' }}>
-          {symbol} - TradingView Lightweight Charts
+        <h3 style={{ margin: 0, color: colors.accent.primary, fontSize: typography.fontSize.md, fontWeight: typography.fontWeight.semibold }}>
+          {symbol}
         </h3>
-        <p style={{ margin: '5px 0 0 0', fontSize: '0.9em', color: '#888' }}>
-          Live data from Alpaca via SSE • {candles ? Object.keys(candles).length : 0} candles loaded
+        <p style={{ margin: '4px 0 0 0', fontSize: typography.fontSize.xs, color: colors.text.tertiary }}>
+          Live data from Alpaca • {candles ? Object.keys(candles).length : 0} candles
         </p>
       </div>
       <div
@@ -204,9 +204,8 @@ const LightweightStockChart: React.FC<LightweightStockChartProps> = ({ symbol, c
         style={{
           width: '100%',
           height: '600px',
-          border: '1px solid #444',
-          borderRadius: '0 0 8px 8px',
-          backgroundColor: '#1a1a1a',
+          borderRadius: `0 0 ${borderRadius.lg} ${borderRadius.lg}`,
+          backgroundColor: colors.bg.secondary,
         }}
       />
     </div>

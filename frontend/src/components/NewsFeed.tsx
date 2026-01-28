@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { getAuthToken } from '../lib/auth'
+import { colors, borderRadius, typography } from '../theme'
 
 interface NewsItem {
   time: string
@@ -108,33 +109,33 @@ function NewsFeed({ backendUrl }: NewsFeedProps) {
       height: '100%',
       display: 'flex',
       flexDirection: 'column',
-      padding: '24px'
+      padding: '20px'
     }}>
       <div style={{
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: '20px'
+        marginBottom: '16px'
       }}>
-        <h2 style={{ margin: 0, fontSize: '18px', fontWeight: '600', color: '#e0e0e0' }}>Market News</h2>
+        <h2 style={{ margin: 0, fontSize: typography.fontSize.lg, fontWeight: typography.fontWeight.semibold, color: colors.text.primary }}>Market News</h2>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           {status === 'connected' && (
             <>
               <span style={{
                 width: '6px',
                 height: '6px',
-                backgroundColor: '#10b981',
+                backgroundColor: colors.status.success,
                 borderRadius: '50%',
                 display: 'inline-block'
               }} />
-              <span style={{ fontSize: '12px', color: '#10b981' }}>Live</span>
+              <span style={{ fontSize: typography.fontSize.xs, color: colors.status.success }}>Live</span>
             </>
           )}
           {status === 'connecting' && (
-            <span style={{ fontSize: '12px', color: '#f59e0b' }}>Connecting...</span>
+            <span style={{ fontSize: typography.fontSize.xs, color: colors.status.warning }}>Connecting...</span>
           )}
           {status === 'error' && (
-            <span style={{ fontSize: '12px', color: '#ef4444' }}>Error</span>
+            <span style={{ fontSize: typography.fontSize.xs, color: colors.status.error }}>Error</span>
           )}
         </div>
       </div>
@@ -144,14 +145,14 @@ function NewsFeed({ backendUrl }: NewsFeedProps) {
         overflowY: 'auto',
         display: 'flex',
         flexDirection: 'column',
-        gap: '12px'
+        gap: '10px'
       }}>
         {newsItems.length === 0 ? (
           <div style={{
             textAlign: 'center',
             padding: '40px 20px',
-            color: '#666',
-            fontSize: '14px'
+            color: colors.text.tertiary,
+            fontSize: typography.fontSize.sm
           }}>
             Waiting for news...
           </div>
@@ -160,23 +161,23 @@ function NewsFeed({ backendUrl }: NewsFeedProps) {
             <div
               key={index}
               style={{
-                backgroundColor: '#0f0f0f',
-                borderRadius: '8px',
+                backgroundColor: colors.bg.primary,
+                borderRadius: borderRadius.lg,
                 padding: '14px',
                 cursor: 'pointer',
                 transition: 'all 0.2s',
-                border: expandedIndex === index ? '1px solid #3b82f6' : '1px solid #2a2a2a'
+                border: expandedIndex === index ? `1px solid ${colors.accent.primary}` : `1px solid ${colors.border.default}`
               }}
               onClick={() => toggleExpand(index)}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{
-                    fontWeight: '500',
+                    fontWeight: typography.fontWeight.medium,
                     marginBottom: '8px',
-                    fontSize: '13px',
+                    fontSize: typography.fontSize.sm,
                     lineHeight: '1.4',
-                    color: '#e0e0e0'
+                    color: colors.text.primary
                   }}>
                     {item.headline}
                   </div>
@@ -191,12 +192,13 @@ function NewsFeed({ backendUrl }: NewsFeedProps) {
                         <span
                           key={i}
                           style={{
-                            backgroundColor: '#1e3a4f',
-                            padding: '2px 6px',
-                            borderRadius: '4px',
-                            fontSize: '10px',
-                            color: '#60a5fa',
-                            fontWeight: '500'
+                            backgroundColor: colors.accent.muted,
+                            padding: '2px 8px',
+                            borderRadius: borderRadius.sm,
+                            fontSize: typography.fontSize.xs,
+                            color: colors.accent.primary,
+                            fontWeight: typography.fontWeight.medium,
+                            fontFamily: typography.fontFamily.mono
                           }}
                         >
                           {ticker}
@@ -206,8 +208,8 @@ function NewsFeed({ backendUrl }: NewsFeedProps) {
                   )}
                 </div>
                 <div style={{
-                  fontSize: '11px',
-                  color: '#666',
+                  fontSize: typography.fontSize.xs,
+                  color: colors.text.tertiary,
                   whiteSpace: 'nowrap',
                   flexShrink: 0
                 }}>
@@ -219,10 +221,10 @@ function NewsFeed({ backendUrl }: NewsFeedProps) {
                 <div style={{
                   marginTop: '12px',
                   paddingTop: '12px',
-                  borderTop: '1px solid #2a2a2a',
-                  fontSize: '12px',
+                  borderTop: `1px solid ${colors.border.default}`,
+                  fontSize: typography.fontSize.xs,
                   lineHeight: '1.6',
-                  color: '#a0a0a0'
+                  color: colors.text.secondary
                 }}>
                   {item.summary}
                   {item.url && (
@@ -232,10 +234,10 @@ function NewsFeed({ backendUrl }: NewsFeedProps) {
                         target="_blank"
                         rel="noopener noreferrer"
                         style={{
-                          color: '#3b82f6',
-                          fontSize: '12px',
+                          color: colors.accent.primary,
+                          fontSize: typography.fontSize.xs,
                           textDecoration: 'none',
-                          fontWeight: '500'
+                          fontWeight: typography.fontWeight.medium
                         }}
                         onClick={(e) => e.stopPropagation()}
                       >

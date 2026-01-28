@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from 'react'
-import './Dashboard.css'
 import LightweightStockChart from './LightweightStockChart'
 import NewsFeed from './NewsFeed'
 import { supabase } from '../lib/supabase'
@@ -8,7 +7,9 @@ import { getAuthToken } from '../lib/auth'
 import SelectBank from './SelectBank'
 import AccountBalances from './AccountBalances'
 import AllBalances from './AllBalances'
-import logoLight from '../assets/LucrumStackLight.jpg'
+import Sidebar from './Sidebar'
+import SearchBar from './SearchBar'
+import { colors, borderRadius, typography } from '../theme'
 
 interface StockData {
   symbol: string
@@ -613,178 +614,39 @@ export default function Dashboard() {
     }
   }, [])
 
+  // Map activeStocks to the format expected by Sidebar
+  const sidebarStocks = new Map(
+    Array.from(activeStocks.entries()).map(([symbol, stock]) => [
+      symbol,
+      {
+        symbol: stock.symbol,
+        status: stock.status,
+        isPermanent: stock.isPermanent,
+      },
+    ])
+  )
+
   return (
     <div style={{
       display: 'flex',
       height: '100vh',
       width: '100vw',
-      backgroundColor: '#0f0f0f',
-      color: '#e0e0e0',
+      backgroundColor: colors.bg.primary,
+      color: colors.text.primary,
       overflow: 'hidden',
       margin: 0,
       padding: 0
     }}>
       {/* Left Sidebar - Navigation */}
-      <div style={{
-        width: '200px',
-        backgroundColor: '#1a1a1a',
-        borderRight: '1px solid #2a2a2a',
-        display: 'flex',
-        flexDirection: 'column',
-        flexShrink: 0
-      }}>
-        {/* Logo/Header */}
-        <div style={{
-          padding: '20px',
-          borderBottom: '1px solid #2a2a2a',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '10px'
-        }}>
-          <img
-            src={logoLight}
-            alt="LucrumStack"
-            style={{
-              width: '32px',
-              height: '32px',
-              borderRadius: '6px',
-              objectFit: 'cover'
-            }}
-          />
-          <span style={{ fontSize: '16px', fontWeight: '600' }}>LucrumStack</span>
-        </div>
-
-        {/* Navigation Menu */}
-        <div style={{ padding: '5px 0' }}>
-          <button
-            onClick={() => setCurrentView('stocks')}
-            style={{
-              width: '100%',
-              padding: '12px 20px',
-              border: 'none',
-              backgroundColor: currentView === 'stocks' ? '#2a2a2a' : 'transparent',
-              color: currentView === 'stocks' ? '#3b82f6' : '#a0a0a0',
-              cursor: 'pointer',
-              textAlign: 'left',
-              fontSize: '14px',
-              fontWeight: '500',
-              transition: 'all 0.2s',
-              borderLeft: currentView === 'stocks' ? '3px solid #3b82f6' : '3px solid transparent'
-            }}
-          >
-            Stocks
-          </button>
-          <button
-            onClick={() => setCurrentView('portfolio')}
-            style={{
-              width: '100%',
-              padding: '12px 20px',
-              border: 'none',
-              backgroundColor: currentView === 'portfolio' ? '#2a2a2a' : 'transparent',
-              color: currentView === 'portfolio' ? '#3b82f6' : '#a0a0a0',
-              cursor: 'pointer',
-              textAlign: 'left',
-              fontSize: '14px',
-              fontWeight: '500',
-              transition: 'all 0.2s',
-              borderLeft: currentView === 'portfolio' ? '3px solid #3b82f6' : '3px solid transparent'
-            }}
-          >
-            Portfolio
-          </button>
-        </div>
-
-        {/* Stock List */}
-        {currentView === 'stocks' && activeStocks.size > 0 && (
-          <div style={{
-            flex: 1,
-            overflowY: 'auto',
-            padding: '5px 0',
-            borderTop: '1px solid #2a2a2a'
-          }}>
-            <div style={{
-              padding: '5px 10px',
-              fontSize: '12px',
-              color: '#666',
-              fontWeight: '600',
-              textTransform: 'uppercase'
-            }}>
-              Watching
-            </div>
-            {Array.from(activeStocks.entries()).map(([symbol, stock]) => (
-              <div
-                key={symbol}
-                onClick={() => switchToStock(symbol)}
-                style={{
-                  padding: '5px 10px',
-                  cursor: 'pointer',
-                  backgroundColor: selectedStock === symbol ? '#2a2a2a' : 'transparent',
-                  borderLeft: selectedStock === symbol ? '3px solid #3b82f6' : '3px solid transparent',
-                  transition: 'all 0.2s',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center'
-                }}
-              >
-                <div>
-                  <div style={{ fontSize: '12px', fontWeight: '300', color: '#e0e0e0', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    {symbol}
-                    {stock.isPermanent && (
-                      <span title="Saved to watchlist" style={{ color: '#3b82f6', fontSize: '10px' }}>★</span>
-                    )}
-                  </div>
-                  <div style={{ fontSize: '12px', color: '#666', marginTop: '2px' }}>
-                    {stock.status === 'streaming' && '🔴 Live'}
-                    {stock.status === 'paused' && '⏸ Paused'}
-                    {stock.status === 'loading' && '⏳ Loading'}
-                    {stock.status === 'error' && '⚠ Error'}
-                  </div>
-                </div>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    removeStock(symbol)
-                  }}
-                  style={{
-                    padding: '4px 8px',
-                    fontSize: '11px',
-                    backgroundColor: 'transparent',
-                    color: '#666',
-                    border: '1px solid #333',
-                    borderRadius: '4px',
-                    cursor: 'pointer'
-                  }}
-                >
-                  ×
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Bottom - Sign Out */}
-        <div style={{
-          marginTop: 'auto',
-          padding: '20px',
-          borderTop: '1px solid #2a2a2a'
-        }}>
-          <button
-            onClick={handleLogout}
-            style={{
-              width: '100%',
-              padding: '10px',
-              backgroundColor: 'transparent',
-              color: '#a0a0a0',
-              border: '1px solid #333',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              fontSize: '14px'
-            }}
-          >
-            Sign Out
-          </button>
-        </div>
-      </div>
+      <Sidebar
+        currentView={currentView}
+        onViewChange={setCurrentView}
+        activeStocks={sidebarStocks}
+        selectedStock={selectedStock}
+        onStockSelect={switchToStock}
+        onStockRemove={removeStock}
+        onLogout={handleLogout}
+      />
 
       {/* Main Content Area */}
       <div style={{
@@ -794,40 +656,12 @@ export default function Dashboard() {
         overflow: 'hidden'
       }}>
         {/* Top Search Bar */}
-        <div style={{
-          padding: '16px 24px',
-          backgroundColor: '#1a1a1a',
-          borderBottom: '1px solid #2a2a2a',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '16px'
-        }}>
-          <input
-            type="text"
-            value={searchSymbol}
-            onChange={(e) => setSearchSymbol(e.target.value.toUpperCase())}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                handleViewStock()
-              }
-            }}
-            placeholder="Search for stocks..."
-            style={{
-              flex: 1,
-              maxWidth: '600px',
-              padding: '12px 16px',
-              fontSize: '14px',
-              backgroundColor: '#0f0f0f',
-              color: '#e0e0e0',
-              border: '1px solid #333',
-              borderRadius: '8px',
-              outline: 'none'
-            }}
-          />
-          {globalStatus && (
-            <span style={{ fontSize: '13px', color: '#666' }}>{globalStatus}</span>
-          )}
-        </div>
+        <SearchBar
+          value={searchSymbol}
+          onChange={setSearchSymbol}
+          onSubmit={handleViewStock}
+          status={globalStatus}
+        />
 
         {/* Content - Two Column Layout (Chart + News) */}
         <div style={{
@@ -839,36 +673,36 @@ export default function Dashboard() {
           <div style={{
             flex: '1 1 55%',
             overflowY: 'auto',
-            padding: '12px'
+            padding: '16px'
           }}>
             {currentView === 'portfolio' ? (
               <div style={{
-                backgroundColor: '#1a1a1a',
-                borderRadius: '12px',
+                backgroundColor: colors.bg.secondary,
+                borderRadius: borderRadius.xl,
                 padding: '24px',
-                border: '1px solid #2a2a2a'
+                border: `1px solid ${colors.border.default}`
               }}>
-                <h2 style={{ fontSize: '24px', marginBottom: '24px', color: '#e0e0e0' }}>Portfolio</h2>
+                <h2 style={{ fontSize: typography.fontSize['2xl'], marginBottom: '24px', color: colors.text.primary, fontWeight: typography.fontWeight.semibold }}>Portfolio</h2>
 
                 {/* Tabs for Portfolio Subsections */}
                 <div style={{
                   display: 'flex',
-                  gap: '12px',
+                  gap: '8px',
                   marginBottom: '24px',
-                  borderBottom: '1px solid #2a2a2a',
+                  borderBottom: `1px solid ${colors.border.default}`,
                   paddingBottom: '0'
                 }}>
                   <button
                     onClick={() => setPortfolioSubView('all')}
                     style={{
-                      padding: '12px 24px',
+                      padding: '12px 20px',
                       backgroundColor: 'transparent',
                       border: 'none',
-                      color: portfolioSubView === 'all' ? '#3b82f6' : '#a0a0a0',
+                      color: portfolioSubView === 'all' ? colors.accent.primary : colors.text.secondary,
                       cursor: 'pointer',
-                      fontSize: '14px',
-                      fontWeight: '500',
-                      borderBottom: portfolioSubView === 'all' ? '2px solid #3b82f6' : '2px solid transparent',
+                      fontSize: typography.fontSize.sm,
+                      fontWeight: typography.fontWeight.medium,
+                      borderBottom: portfolioSubView === 'all' ? `2px solid ${colors.accent.primary}` : '2px solid transparent',
                       transition: 'all 0.2s'
                     }}
                   >
@@ -877,14 +711,14 @@ export default function Dashboard() {
                   <button
                     onClick={() => setPortfolioSubView('connect')}
                     style={{
-                      padding: '12px 24px',
+                      padding: '12px 20px',
                       backgroundColor: 'transparent',
                       border: 'none',
-                      color: portfolioSubView === 'connect' ? '#3b82f6' : '#a0a0a0',
+                      color: portfolioSubView === 'connect' ? colors.accent.primary : colors.text.secondary,
                       cursor: 'pointer',
-                      fontSize: '14px',
-                      fontWeight: '500',
-                      borderBottom: portfolioSubView === 'connect' ? '2px solid #3b82f6' : '2px solid transparent',
+                      fontSize: typography.fontSize.sm,
+                      fontWeight: typography.fontWeight.medium,
+                      borderBottom: portfolioSubView === 'connect' ? `2px solid ${colors.accent.primary}` : '2px solid transparent',
                       transition: 'all 0.2s'
                     }}
                   >
@@ -893,14 +727,14 @@ export default function Dashboard() {
                   <button
                     onClick={() => setPortfolioSubView('balances')}
                     style={{
-                      padding: '12px 24px',
+                      padding: '12px 20px',
                       backgroundColor: 'transparent',
                       border: 'none',
-                      color: portfolioSubView === 'balances' ? '#3b82f6' : '#a0a0a0',
+                      color: portfolioSubView === 'balances' ? colors.accent.primary : colors.text.secondary,
                       cursor: 'pointer',
-                      fontSize: '14px',
-                      fontWeight: '500',
-                      borderBottom: portfolioSubView === 'balances' ? '2px solid #3b82f6' : '2px solid transparent',
+                      fontSize: typography.fontSize.sm,
+                      fontWeight: typography.fontWeight.medium,
+                      borderBottom: portfolioSubView === 'balances' ? `2px solid ${colors.accent.primary}` : '2px solid transparent',
                       transition: 'all 0.2s'
                     }}
                   >
@@ -911,12 +745,12 @@ export default function Dashboard() {
                 {/* Bank Connection Status Messages */}
                 {bankConnectionStatus === 'success' && (
                   <div style={{
-                    backgroundColor: '#10b981',
+                    backgroundColor: colors.status.success,
                     color: 'white',
                     padding: '16px',
-                    borderRadius: '8px',
+                    borderRadius: borderRadius.lg,
                     marginBottom: '24px',
-                    fontSize: '14px'
+                    fontSize: typography.fontSize.sm
                   }}>
                     ✓ {bankConnectionMessage}
                   </div>
@@ -924,12 +758,12 @@ export default function Dashboard() {
 
                 {bankConnectionStatus === 'error' && (
                   <div style={{
-                    backgroundColor: '#ef4444',
+                    backgroundColor: colors.status.error,
                     color: 'white',
                     padding: '16px',
-                    borderRadius: '8px',
+                    borderRadius: borderRadius.lg,
                     marginBottom: '24px',
-                    fontSize: '14px'
+                    fontSize: typography.fontSize.sm
                   }}>
                     ✗ {bankConnectionMessage}
                   </div>
@@ -950,14 +784,14 @@ export default function Dashboard() {
               </div>
             ) : activeStocks.size === 0 ? (
               <div style={{
-                backgroundColor: '#1a1a1a',
-                borderRadius: '12px',
+                backgroundColor: colors.bg.secondary,
+                borderRadius: borderRadius.xl,
                 padding: '60px',
                 textAlign: 'center',
-                border: '1px solid #2a2a2a'
+                border: `1px solid ${colors.border.default}`
               }}>
-                <h2 style={{ fontSize: '24px', marginBottom: '12px', color: '#e0e0e0' }}>No stocks yet</h2>
-                <p style={{ fontSize: '16px', color: '#666' }}>
+                <h2 style={{ fontSize: typography.fontSize['2xl'], marginBottom: '12px', color: colors.text.primary, fontWeight: typography.fontWeight.semibold }}>No stocks yet</h2>
+                <p style={{ fontSize: typography.fontSize.md, color: colors.text.tertiary }}>
                   Search for a stock symbol above to start tracking.
                 </p>
               </div>
@@ -974,21 +808,21 @@ export default function Dashboard() {
                     marginBottom: '20px'
                   }}>
                     <div>
-                      <h1 style={{ fontSize: '32px', margin: 0, color: '#e0e0e0' }}>
+                      <h1 style={{ fontSize: typography.fontSize['3xl'], margin: 0, color: colors.text.primary, fontWeight: typography.fontWeight.bold }}>
                         {subscription.symbol}
                       </h1>
-                      <div style={{ fontSize: '13px', color: '#666', marginTop: '4px' }}>
+                      <div style={{ fontSize: typography.fontSize.sm, color: colors.text.tertiary, marginTop: '6px' }}>
                         {subscription.status === 'streaming' && (
-                          <span style={{ color: '#10b981' }}>● Live stream</span>
+                          <span style={{ color: colors.status.success }}>● Live stream</span>
                         )}
                         {subscription.status === 'paused' && (
-                          <span style={{ color: '#f59e0b' }}>⏸ Stream paused</span>
+                          <span style={{ color: colors.status.warning }}>◉ Stream paused</span>
                         )}
                         {subscription.status === 'loading' && (
-                          <span style={{ color: '#f59e0b' }}>⏳ Loading...</span>
+                          <span style={{ color: colors.status.warning }}>○ Loading...</span>
                         )}
                         {subscription.status === 'error' && (
-                          <span style={{ color: '#ef4444' }}>⚠ Error</span>
+                          <span style={{ color: colors.status.error }}>● Error</span>
                         )}
                       </div>
                     </div>
@@ -1000,12 +834,12 @@ export default function Dashboard() {
                       }
                       style={{
                         padding: '10px 20px',
-                        fontSize: '14px',
-                        fontWeight: '500',
-                        backgroundColor: subscription.isPermanent ? 'transparent' : '#3b82f6',
-                        color: subscription.isPermanent ? '#ef4444' : '#ffffff',
-                        border: subscription.isPermanent ? '1px solid #ef4444' : 'none',
-                        borderRadius: '8px',
+                        fontSize: typography.fontSize.sm,
+                        fontWeight: typography.fontWeight.medium,
+                        backgroundColor: subscription.isPermanent ? 'transparent' : colors.accent.primary,
+                        color: subscription.isPermanent ? colors.status.error : '#ffffff',
+                        border: subscription.isPermanent ? `1px solid ${colors.status.error}` : 'none',
+                        borderRadius: borderRadius.lg,
                         cursor: 'pointer',
                         transition: 'all 0.2s'
                       }}
@@ -1017,11 +851,11 @@ export default function Dashboard() {
                   {subscription.status === 'error' && (
                     <div style={{
                       padding: '16px',
-                      backgroundColor: '#7f1d1d',
+                      backgroundColor: 'rgba(239, 68, 68, 0.1)',
                       color: '#fecaca',
-                      borderRadius: '8px',
+                      borderRadius: borderRadius.lg,
                       marginBottom: '20px',
-                      border: '1px solid #991b1b'
+                      border: `1px solid ${colors.status.error}`
                     }}>
                       Error: {subscription.errorMessage || 'Unknown error'}
                     </div>
@@ -1029,13 +863,13 @@ export default function Dashboard() {
 
                   {subscription.status === 'loading' && (
                     <div style={{
-                      backgroundColor: '#1a1a1a',
-                      borderRadius: '12px',
+                      backgroundColor: colors.bg.secondary,
+                      borderRadius: borderRadius.xl,
                       padding: '60px',
                       textAlign: 'center',
-                      border: '1px solid #2a2a2a'
+                      border: `1px solid ${colors.border.default}`
                     }}>
-                      <div style={{ fontSize: '16px', color: '#666' }}>
+                      <div style={{ fontSize: typography.fontSize.md, color: colors.text.tertiary }}>
                         Connecting to {subscription.symbol}...
                       </div>
                     </div>
@@ -1045,10 +879,10 @@ export default function Dashboard() {
                    subscription.stockData?.candles &&
                    Object.keys(subscription.stockData.candles).length > 0 && (
                     <div style={{
-                      backgroundColor: '#1a1a1a',
-                      borderRadius: '12px',
+                      backgroundColor: colors.bg.secondary,
+                      borderRadius: borderRadius.xl,
                       padding: '20px',
-                      border: '1px solid #2a2a2a'
+                      border: `1px solid ${colors.border.default}`
                     }}>
                       <LightweightStockChart
                         symbol={subscription.stockData.symbol}
@@ -1060,13 +894,13 @@ export default function Dashboard() {
                   {(subscription.status === 'streaming' || subscription.status === 'paused') &&
                    (!subscription.stockData?.candles || Object.keys(subscription.stockData.candles).length === 0) && (
                     <div style={{
-                      backgroundColor: '#1a1a1a',
-                      borderRadius: '12px',
+                      backgroundColor: colors.bg.secondary,
+                      borderRadius: borderRadius.xl,
                       padding: '60px',
                       textAlign: 'center',
-                      border: '1px solid #2a2a2a'
+                      border: `1px solid ${colors.border.default}`
                     }}>
-                      <div style={{ fontSize: '16px', color: '#666' }}>
+                      <div style={{ fontSize: typography.fontSize.md, color: colors.text.tertiary }}>
                         Waiting for data from {subscription.symbol}...
                       </div>
                     </div>
@@ -1081,8 +915,8 @@ export default function Dashboard() {
             <div style={{
               width: '380px',
               flexShrink: 0,
-              backgroundColor: '#1a1a1a',
-              borderLeft: '1px solid #2a2a2a',
+              backgroundColor: colors.bg.secondary,
+              borderLeft: `1px solid ${colors.border.default}`,
               overflowY: 'auto'
             }}>
               <NewsFeed backendUrl={BACKEND_URL} />

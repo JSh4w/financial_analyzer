@@ -1,28 +1,29 @@
 import { CSSProperties } from 'react'
 import logoLight from '../assets/LucrumStackLight.jpg'
+import { colors, borderRadius, typography } from '../theme'
 
 interface LandingPageProps {
   onGetStarted: () => void
 }
 
-// Theme colors - green/turquoise
+// Theme colors - Blue accent
 const theme = {
-  primary: '#0d9488',       // Teal-600
-  primaryLight: '#14b8a6',  // Teal-500
-  primaryDark: '#0f766e',   // Teal-700
-  accent: '#2dd4bf',        // Teal-400
-  glow: 'rgba(13, 148, 136, 0.4)',
-  glowStrong: 'rgba(13, 148, 136, 0.5)',
-  gradientStart: '#0d9488',
-  gradientEnd: '#059669',   // Emerald-600
+  primary: colors.accent.primary,
+  primaryLight: '#60a5fa',  // Blue-400
+  primaryDark: colors.accent.hover,
+  accent: '#60a5fa',        // Blue-400
+  glow: colors.accent.glow,
+  glowStrong: 'rgba(59, 130, 246, 0.5)',
+  gradientStart: colors.accent.primary,
+  gradientEnd: colors.accent.hover,
 }
 
 export default function LandingPage({ onGetStarted }: LandingPageProps) {
   const styles: Record<string, CSSProperties> = {
     container: {
       minHeight: '100vh',
-      backgroundColor: '#0a0a0a',
-      color: '#ffffff',
+      backgroundColor: colors.bg.primary,
+      color: colors.text.primary,
       overflowY: 'auto',
       overflowX: 'hidden',
     },
@@ -30,15 +31,15 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
       display: 'flex',
       justifyContent: 'space-between',
       alignItems: 'center',
-      padding: '28px 60px',
+      padding: '20px 60px',
       position: 'fixed' as const,
       top: 0,
       left: 0,
       right: 0,
-      backgroundColor: 'rgba(10, 10, 10, 0.9)',
-      backdropFilter: 'blur(10px)',
+      backgroundColor: 'rgba(12, 12, 12, 0.85)',
+      backdropFilter: 'blur(12px)',
       zIndex: 1000,
-      borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+      borderBottom: `1px solid ${colors.border.subtle}`,
     },
     logoContainer: {
       display: 'flex',
@@ -47,13 +48,14 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
       cursor: 'pointer',
     },
     logoImage: {
-      height: '48px',
+      height: '40px',
       width: 'auto',
+      borderRadius: borderRadius.md,
     },
     logoText: {
-      fontSize: '26px',
-      fontWeight: 700,
-      color: '#ffffff',
+      fontSize: '22px',
+      fontWeight: typography.fontWeight.bold,
+      color: colors.text.primary,
     },
     navButtons: {
       display: 'flex',
@@ -61,11 +63,11 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
     },
     navButton: {
       padding: '10px 20px',
-      borderRadius: '8px',
+      borderRadius: borderRadius.lg,
       border: 'none',
       cursor: 'pointer',
       fontSize: '14px',
-      fontWeight: 500,
+      fontWeight: typography.fontWeight.medium,
       transition: 'all 0.2s ease',
     },
     hero: {
@@ -76,26 +78,26 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
       textAlign: 'center' as const,
       padding: '160px 20px 100px',
       minHeight: '100vh',
-      background: `radial-gradient(ellipse at top, rgba(13, 148, 136, 0.15) 0%, transparent 50%)`,
+      background: `radial-gradient(ellipse at top, rgba(59, 130, 246, 0.1) 0%, transparent 60%)`,
     },
     headline: {
       fontSize: 'clamp(40px, 6vw, 72px)',
-      fontWeight: 800,
+      fontWeight: typography.fontWeight.bold,
       lineHeight: 1.1,
       margin: '0 0 24px',
       maxWidth: '900px',
     },
     gradientText: {
-      background: 'linear-gradient(135deg, #ffffff 0%, #a0a0a0 100%)',
+      background: `linear-gradient(135deg, ${colors.text.primary} 0%, ${colors.text.secondary} 100%)`,
       WebkitBackgroundClip: 'text',
       WebkitTextFillColor: 'transparent',
     },
     subheadline: {
-      fontSize: '20px',
-      color: 'rgba(255, 255, 255, 0.7)',
+      fontSize: '18px',
+      color: colors.text.secondary,
       maxWidth: '600px',
       margin: '0 0 40px',
-      lineHeight: 1.6,
+      lineHeight: 1.7,
     },
     ctaGroup: {
       display: 'flex',
@@ -104,10 +106,10 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
       justifyContent: 'center',
     },
     primaryCta: {
-      padding: '16px 32px',
-      fontSize: '16px',
-      fontWeight: 600,
-      borderRadius: '10px',
+      padding: '14px 28px',
+      fontSize: '15px',
+      fontWeight: typography.fontWeight.semibold,
+      borderRadius: borderRadius.lg,
       border: 'none',
       cursor: 'pointer',
       background: `linear-gradient(135deg, ${theme.primary} 0%, ${theme.gradientEnd} 100%)`,
@@ -116,19 +118,19 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
       boxShadow: `0 4px 20px ${theme.glow}`,
     },
     secondaryCta: {
-      padding: '16px 32px',
-      fontSize: '16px',
-      fontWeight: 600,
-      borderRadius: '10px',
-      border: '1px solid rgba(255, 255, 255, 0.2)',
+      padding: '14px 28px',
+      fontSize: '15px',
+      fontWeight: typography.fontWeight.semibold,
+      borderRadius: borderRadius.lg,
+      border: `1px solid ${colors.border.hover}`,
       cursor: 'pointer',
       backgroundColor: 'transparent',
-      color: '#ffffff',
+      color: colors.text.primary,
       transition: 'all 0.2s ease',
     },
     section: {
       padding: '100px 60px',
-      maxWidth: '1400px',
+      maxWidth: '1200px',
       margin: '0 auto',
     },
     sectionHeader: {
@@ -136,65 +138,71 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
       marginBottom: '60px',
     },
     sectionTitle: {
-      fontSize: '40px',
-      fontWeight: 700,
+      fontSize: typography.fontSize['4xl'],
+      fontWeight: typography.fontWeight.bold,
       margin: '0 0 16px',
+      color: colors.text.primary,
     },
     sectionSubtitle: {
-      fontSize: '18px',
-      color: 'rgba(255, 255, 255, 0.6)',
+      fontSize: typography.fontSize.md,
+      color: colors.text.secondary,
       maxWidth: '600px',
       margin: '0 auto',
+      lineHeight: 1.6,
     },
     featuresGrid: {
       display: 'grid',
       gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-      gap: '24px',
+      gap: '20px',
     },
     featureCard: {
-      padding: '32px',
-      backgroundColor: 'rgba(255, 255, 255, 0.03)',
-      border: '1px solid rgba(255, 255, 255, 0.08)',
-      borderRadius: '16px',
-      transition: 'all 0.3s ease',
+      padding: '28px',
+      backgroundColor: colors.bg.secondary,
+      border: `1px solid ${colors.border.default}`,
+      borderRadius: borderRadius.xl,
+      transition: 'all 0.2s ease',
     },
     featureIcon: {
-      width: '48px',
-      height: '48px',
-      borderRadius: '12px',
+      width: '44px',
+      height: '44px',
+      borderRadius: borderRadius.lg,
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      marginBottom: '20px',
-      backgroundColor: `rgba(13, 148, 136, 0.15)`,
-      color: theme.accent,
-      fontSize: '20px',
-      fontWeight: 600,
+      marginBottom: '16px',
+      backgroundColor: colors.accent.muted,
+      color: colors.accent.primary,
+      fontSize: '14px',
+      fontWeight: typography.fontWeight.bold,
+      fontFamily: typography.fontFamily.mono,
+      letterSpacing: '-0.5px',
     },
     featureTitle: {
-      fontSize: '20px',
-      fontWeight: 600,
-      margin: '0 0 12px',
+      fontSize: typography.fontSize.lg,
+      fontWeight: typography.fontWeight.semibold,
+      margin: '0 0 10px',
+      color: colors.text.primary,
     },
     featureDesc: {
-      fontSize: '15px',
-      color: 'rgba(255, 255, 255, 0.6)',
+      fontSize: typography.fontSize.sm,
+      color: colors.text.secondary,
       lineHeight: 1.6,
       margin: 0,
     },
     ctaSection: {
       padding: '100px 60px',
       textAlign: 'center' as const,
-      background: `radial-gradient(ellipse at bottom, rgba(13, 148, 136, 0.15) 0%, transparent 50%)`,
+      background: `radial-gradient(ellipse at bottom, rgba(59, 130, 246, 0.08) 0%, transparent 60%)`,
     },
     ctaTitle: {
-      fontSize: '36px',
-      fontWeight: 700,
+      fontSize: typography.fontSize['3xl'],
+      fontWeight: typography.fontWeight.bold,
       margin: '0 0 16px',
+      color: colors.text.primary,
     },
     ctaSubtitle: {
-      fontSize: '18px',
-      color: 'rgba(255, 255, 255, 0.6)',
+      fontSize: typography.fontSize.md,
+      color: colors.text.secondary,
       margin: '0 0 32px',
     },
   }
@@ -306,13 +314,13 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
               key={index}
               style={styles.featureCard}
               onMouseOver={(e) => {
-                e.currentTarget.style.backgroundColor = 'rgba(13, 148, 136, 0.08)'
-                e.currentTarget.style.borderColor = 'rgba(13, 148, 136, 0.3)'
-                e.currentTarget.style.transform = 'translateY(-4px)'
+                e.currentTarget.style.backgroundColor = colors.bg.tertiary
+                e.currentTarget.style.borderColor = colors.border.hover
+                e.currentTarget.style.transform = 'translateY(-2px)'
               }}
               onMouseOut={(e) => {
-                e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.03)'
-                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.08)'
+                e.currentTarget.style.backgroundColor = colors.bg.secondary
+                e.currentTarget.style.borderColor = colors.border.default
                 e.currentTarget.style.transform = 'translateY(0)'
               }}
             >

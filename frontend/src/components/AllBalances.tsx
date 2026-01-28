@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { BankClientDatafeed } from '../services/bankclient-datafeed'
 import { T212Service, T212Summary, T212Error } from '../services/t212-service'
 import { getAuthToken } from '../lib/auth'
+import { colors, borderRadius, typography } from '../theme'
 
 interface Balance {
   balanceAmount: {
@@ -53,7 +54,7 @@ function T212KeysModal({ onClose, onSubmit, loading }: T212KeysModalProps) {
         left: 0,
         right: 0,
         bottom: 0,
-        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+        backgroundColor: 'rgba(0, 0, 0, 0.85)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -63,19 +64,19 @@ function T212KeysModal({ onClose, onSubmit, loading }: T212KeysModalProps) {
     >
       <div
         style={{
-          backgroundColor: '#1a1a1a',
-          borderRadius: 12,
+          backgroundColor: colors.bg.secondary,
+          borderRadius: borderRadius.xl,
           padding: 32,
           maxWidth: 500,
           width: '90%',
-          border: '1px solid #2a2a2a',
+          border: `1px solid ${colors.border.default}`,
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 style={{ margin: '0 0 8px 0', color: '#e0e0e0', fontSize: 20 }}>
+        <h3 style={{ margin: '0 0 8px 0', color: colors.text.primary, fontSize: typography.fontSize.xl, fontWeight: typography.fontWeight.semibold }}>
           Add Trading212 API Keys
         </h3>
-        <p style={{ margin: '0 0 24px 0', color: '#666', fontSize: 14 }}>
+        <p style={{ margin: '0 0 24px 0', color: colors.text.tertiary, fontSize: typography.fontSize.sm }}>
           Enter your Trading212 API credentials to connect your account
         </p>
 
@@ -83,7 +84,7 @@ function T212KeysModal({ onClose, onSubmit, loading }: T212KeysModalProps) {
           <div style={{ marginBottom: 16 }}>
             <label
               htmlFor="keyId"
-              style={{ display: 'block', marginBottom: 8, color: '#a0a0a0', fontSize: 14 }}
+              style={{ display: 'block', marginBottom: 8, color: colors.text.secondary, fontSize: typography.fontSize.sm }}
             >
               API Key ID
             </label>
@@ -97,11 +98,11 @@ function T212KeysModal({ onClose, onSubmit, loading }: T212KeysModalProps) {
               style={{
                 width: '100%',
                 padding: '12px 16px',
-                fontSize: 14,
-                backgroundColor: '#0f0f0f',
-                color: '#e0e0e0',
-                border: '1px solid #333',
-                borderRadius: 8,
+                fontSize: typography.fontSize.sm,
+                backgroundColor: colors.bg.primary,
+                color: colors.text.primary,
+                border: `1px solid ${colors.border.default}`,
+                borderRadius: borderRadius.lg,
                 outline: 'none',
               }}
             />
@@ -110,7 +111,7 @@ function T212KeysModal({ onClose, onSubmit, loading }: T212KeysModalProps) {
           <div style={{ marginBottom: 24 }}>
             <label
               htmlFor="keySecret"
-              style={{ display: 'block', marginBottom: 8, color: '#a0a0a0', fontSize: 14 }}
+              style={{ display: 'block', marginBottom: 8, color: colors.text.secondary, fontSize: typography.fontSize.sm }}
             >
               API Secret Key
             </label>
@@ -124,11 +125,11 @@ function T212KeysModal({ onClose, onSubmit, loading }: T212KeysModalProps) {
               style={{
                 width: '100%',
                 padding: '12px 16px',
-                fontSize: 14,
-                backgroundColor: '#0f0f0f',
-                color: '#e0e0e0',
-                border: '1px solid #333',
-                borderRadius: 8,
+                fontSize: typography.fontSize.sm,
+                backgroundColor: colors.bg.primary,
+                color: colors.text.primary,
+                border: `1px solid ${colors.border.default}`,
+                borderRadius: borderRadius.lg,
                 outline: 'none',
               }}
             />
@@ -142,12 +143,12 @@ function T212KeysModal({ onClose, onSubmit, loading }: T212KeysModalProps) {
               style={{
                 padding: '10px 20px',
                 backgroundColor: 'transparent',
-                color: '#a0a0a0',
-                border: '1px solid #333',
-                borderRadius: 6,
+                color: colors.text.secondary,
+                border: `1px solid ${colors.border.default}`,
+                borderRadius: borderRadius.md,
                 cursor: loading ? 'not-allowed' : 'pointer',
-                fontSize: 14,
-                fontWeight: 600,
+                fontSize: typography.fontSize.sm,
+                fontWeight: typography.fontWeight.semibold,
               }}
             >
               Cancel
@@ -157,13 +158,13 @@ function T212KeysModal({ onClose, onSubmit, loading }: T212KeysModalProps) {
               disabled={loading || !keyId.trim() || !keySecret.trim()}
               style={{
                 padding: '10px 20px',
-                backgroundColor: loading || !keyId.trim() || !keySecret.trim() ? '#333' : '#3b82f6',
+                backgroundColor: loading || !keyId.trim() || !keySecret.trim() ? colors.bg.tertiary : colors.accent.primary,
                 color: 'white',
                 border: 'none',
-                borderRadius: 6,
+                borderRadius: borderRadius.md,
                 cursor: loading || !keyId.trim() || !keySecret.trim() ? 'not-allowed' : 'pointer',
-                fontSize: 14,
-                fontWeight: 600,
+                fontSize: typography.fontSize.sm,
+                fontWeight: typography.fontWeight.semibold,
               }}
             >
               {loading ? 'Adding...' : 'Add Keys'}
@@ -282,8 +283,8 @@ export default function AllBalances() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <div>
-          <h3 style={{ margin: '0 0 8px 0', color: '#e0e0e0' }}>All Balances</h3>
-          <p style={{ margin: 0, color: '#666' }}>
+          <h3 style={{ margin: '0 0 8px 0', color: colors.text.primary, fontSize: typography.fontSize.lg, fontWeight: typography.fontWeight.semibold }}>All Balances</h3>
+          <p style={{ margin: 0, color: colors.text.tertiary, fontSize: typography.fontSize.sm }}>
             View all your connected accounts and investments
           </p>
         </div>
@@ -291,28 +292,29 @@ export default function AllBalances() {
           onClick={() => setShowValues(!showValues)}
           style={{
             padding: '10px 20px',
-            backgroundColor: '#2a2a2a',
-            color: '#e0e0e0',
-            border: '1px solid #333',
-            borderRadius: 6,
+            backgroundColor: colors.bg.tertiary,
+            color: colors.text.primary,
+            border: `1px solid ${colors.border.default}`,
+            borderRadius: borderRadius.md,
             cursor: 'pointer',
-            fontSize: 14,
-            fontWeight: 600,
+            fontSize: typography.fontSize.sm,
+            fontWeight: typography.fontWeight.semibold,
           }}
         >
-          {showValues ? '👁 Hide Values' : '👁‍🗨 Show Values'}
+          {showValues ? 'Hide Values' : 'Show Values'}
         </button>
       </div>
 
-      {loading && <div style={{ color: '#666' }}>Loading balances...</div>}
+      {loading && <div style={{ color: colors.text.tertiary }}>Loading balances...</div>}
       {error && (
         <div
           style={{
-            color: '#ef4444',
+            color: colors.status.error,
             padding: '16px',
-            backgroundColor: '#7f1d1d',
-            borderRadius: '8px',
+            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+            borderRadius: borderRadius.lg,
             marginBottom: 16,
+            border: `1px solid ${colors.status.error}`,
           }}
         >
           Error: {error}
@@ -325,16 +327,17 @@ export default function AllBalances() {
           <div
             style={{
               padding: 24,
-              borderRadius: 12,
-              border: '2px solid #3b82f6',
-              backgroundColor: '#1a1a1a',
+              borderRadius: borderRadius.xl,
+              border: `1px solid ${colors.accent.primary}`,
+              backgroundColor: colors.bg.secondary,
+              background: `linear-gradient(135deg, ${colors.accent.muted} 0%, ${colors.bg.secondary} 100%)`,
             }}
           >
-            <div style={{ fontSize: 14, color: '#a0a0a0', marginBottom: 8 }}>Total Net Worth</div>
-            <div style={{ fontSize: 36, fontWeight: 700, color: '#10b981' }}>
+            <div style={{ fontSize: typography.fontSize.sm, color: colors.text.secondary, marginBottom: 8 }}>Total Net Worth</div>
+            <div style={{ fontSize: '36px', fontWeight: typography.fontWeight.bold, color: colors.status.success }}>
               {showValues ? formatCurrency(grandTotal, 'GBP') : obfuscateValue()}
             </div>
-            <div style={{ fontSize: 13, color: '#666', marginTop: 12 }}>
+            <div style={{ fontSize: typography.fontSize.sm, color: colors.text.tertiary, marginTop: 12 }}>
               Bank: {showValues ? formatCurrency(totalBankBalance, 'GBP') : obfuscateValue()} |
               Trading212: {showValues ? formatCurrency(totalT212Balance, 'GBP') : obfuscateValue()}
             </div>
@@ -343,7 +346,7 @@ export default function AllBalances() {
           {/* Bank Balances Section */}
           {balancesData && Object.keys(balancesData.balances).length > 0 && (
             <div>
-              <h4 style={{ margin: '0 0 16px 0', color: '#e0e0e0', fontSize: 18 }}>
+              <h4 style={{ margin: '0 0 16px 0', color: colors.text.primary, fontSize: typography.fontSize.lg, fontWeight: typography.fontWeight.semibold }}>
                 Bank Accounts
               </h4>
               {Object.entries(balancesData.balances).map(([institutionName, balances]) => (
@@ -351,14 +354,14 @@ export default function AllBalances() {
                   key={institutionName}
                   style={{
                     padding: 20,
-                    borderRadius: 8,
-                    border: '1px solid #2a2a2a',
-                    backgroundColor: '#1a1a1a',
+                    borderRadius: borderRadius.lg,
+                    border: `1px solid ${colors.border.default}`,
+                    backgroundColor: colors.bg.secondary,
                     marginBottom: 16,
                   }}
                 >
                   <div style={{ marginBottom: 16 }}>
-                    <div style={{ fontSize: 20, fontWeight: '600', color: '#e0e0e0' }}>
+                    <div style={{ fontSize: typography.fontSize.xl, fontWeight: typography.fontWeight.semibold, color: colors.text.primary }}>
                       {institutionName}
                     </div>
                   </div>
@@ -370,24 +373,24 @@ export default function AllBalances() {
                           key={idx}
                           style={{
                             padding: 16,
-                            borderRadius: 6,
-                            backgroundColor: '#2a2a2a',
+                            borderRadius: borderRadius.md,
+                            backgroundColor: colors.bg.tertiary,
                             display: 'flex',
                             justifyContent: 'space-between',
                             alignItems: 'center',
                           }}
                         >
                           <div>
-                            <div style={{ fontSize: 14, fontWeight: 500, color: '#a0a0a0' }}>
+                            <div style={{ fontSize: typography.fontSize.sm, fontWeight: typography.fontWeight.medium, color: colors.text.secondary }}>
                               {balance.balanceType}
                             </div>
                             {balance.referenceDate && (
-                              <div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>
+                              <div style={{ fontSize: typography.fontSize.xs, color: colors.text.tertiary, marginTop: 4 }}>
                                 As of {new Date(balance.referenceDate).toLocaleDateString()}
                               </div>
                             )}
                           </div>
-                          <div style={{ fontSize: 24, fontWeight: 700, color: '#10b981' }}>
+                          <div style={{ fontSize: typography.fontSize['2xl'], fontWeight: typography.fontWeight.bold, color: colors.status.success }}>
                             {showValues
                               ? formatCurrency(
                                   balance.balanceAmount.amount,
@@ -399,7 +402,7 @@ export default function AllBalances() {
                       ))}
                     </div>
                   ) : (
-                    <div style={{ color: '#666', fontSize: 13 }}>No balances available</div>
+                    <div style={{ color: colors.text.tertiary, fontSize: typography.fontSize.sm }}>No balances available</div>
                   )}
                 </div>
               ))}
@@ -408,20 +411,20 @@ export default function AllBalances() {
 
           {/* Trading212 Section */}
           <div>
-            <h4 style={{ margin: '0 0 16px 0', color: '#e0e0e0', fontSize: 18 }}>
+            <h4 style={{ margin: '0 0 16px 0', color: colors.text.primary, fontSize: typography.fontSize.lg, fontWeight: typography.fontWeight.semibold }}>
               Trading212 Investment Account
             </h4>
             {t212Summary ? (
               <div
                 style={{
                   padding: 20,
-                  borderRadius: 8,
-                  border: '1px solid #2a2a2a',
-                  backgroundColor: '#1a1a1a',
+                  borderRadius: borderRadius.lg,
+                  border: `1px solid ${colors.border.default}`,
+                  backgroundColor: colors.bg.secondary,
                 }}
               >
                 <div style={{ marginBottom: 16 }}>
-                  <div style={{ fontSize: 20, fontWeight: '600', color: '#e0e0e0' }}>
+                  <div style={{ fontSize: typography.fontSize.xl, fontWeight: typography.fontWeight.semibold, color: colors.text.primary }}>
                     Trading212
                   </div>
                 </div>
@@ -430,19 +433,19 @@ export default function AllBalances() {
                   <div
                     style={{
                       padding: 16,
-                      borderRadius: 6,
-                      backgroundColor: '#2a2a2a',
+                      borderRadius: borderRadius.md,
+                      backgroundColor: colors.bg.tertiary,
                       display: 'flex',
                       justifyContent: 'space-between',
                       alignItems: 'center',
                     }}
                   >
                     <div>
-                      <div style={{ fontSize: 14, fontWeight: 500, color: '#a0a0a0' }}>
+                      <div style={{ fontSize: typography.fontSize.sm, fontWeight: typography.fontWeight.medium, color: colors.text.secondary }}>
                         Total Worth
                       </div>
                     </div>
-                    <div style={{ fontSize: 24, fontWeight: 700, color: '#10b981' }}>
+                    <div style={{ fontSize: typography.fontSize['2xl'], fontWeight: typography.fontWeight.bold, color: colors.status.success }}>
                       {showValues
                         ? formatCurrency(t212Summary.totalWorth, 'GBP')
                         : obfuscateValue()}
@@ -452,19 +455,19 @@ export default function AllBalances() {
                   <div
                     style={{
                       padding: 16,
-                      borderRadius: 6,
-                      backgroundColor: '#2a2a2a',
+                      borderRadius: borderRadius.md,
+                      backgroundColor: colors.bg.tertiary,
                       display: 'flex',
                       justifyContent: 'space-between',
                       alignItems: 'center',
                     }}
                   >
                     <div>
-                      <div style={{ fontSize: 14, fontWeight: 500, color: '#a0a0a0' }}>
+                      <div style={{ fontSize: typography.fontSize.sm, fontWeight: typography.fontWeight.medium, color: colors.text.secondary }}>
                         Cash Available
                       </div>
                     </div>
-                    <div style={{ fontSize: 20, fontWeight: 600, color: '#e0e0e0' }}>
+                    <div style={{ fontSize: typography.fontSize.xl, fontWeight: typography.fontWeight.semibold, color: colors.text.primary }}>
                       {showValues
                         ? formatCurrency(t212Summary.free, 'GBP')
                         : obfuscateValue()}
@@ -474,19 +477,19 @@ export default function AllBalances() {
                   <div
                     style={{
                       padding: 16,
-                      borderRadius: 6,
-                      backgroundColor: '#2a2a2a',
+                      borderRadius: borderRadius.md,
+                      backgroundColor: colors.bg.tertiary,
                       display: 'flex',
                       justifyContent: 'space-between',
                       alignItems: 'center',
                     }}
                   >
                     <div>
-                      <div style={{ fontSize: 14, fontWeight: 500, color: '#a0a0a0' }}>
+                      <div style={{ fontSize: typography.fontSize.sm, fontWeight: typography.fontWeight.medium, color: colors.text.secondary }}>
                         Invested Value
                       </div>
                     </div>
-                    <div style={{ fontSize: 20, fontWeight: 600, color: '#e0e0e0' }}>
+                    <div style={{ fontSize: typography.fontSize.xl, fontWeight: typography.fontWeight.semibold, color: colors.text.primary }}>
                       {showValues
                         ? formatCurrency(t212Summary.investedValue, 'GBP')
                         : obfuscateValue()}
@@ -496,23 +499,23 @@ export default function AllBalances() {
                   <div
                     style={{
                       padding: 16,
-                      borderRadius: 6,
-                      backgroundColor: '#2a2a2a',
+                      borderRadius: borderRadius.md,
+                      backgroundColor: colors.bg.tertiary,
                       display: 'flex',
                       justifyContent: 'space-between',
                       alignItems: 'center',
                     }}
                   >
                     <div>
-                      <div style={{ fontSize: 14, fontWeight: 500, color: '#a0a0a0' }}>
+                      <div style={{ fontSize: typography.fontSize.sm, fontWeight: typography.fontWeight.medium, color: colors.text.secondary }}>
                         Profit/Loss
                       </div>
                     </div>
                     <div
                       style={{
-                        fontSize: 20,
-                        fontWeight: 600,
-                        color: t212Summary.totalPpl >= 0 ? '#10b981' : '#ef4444',
+                        fontSize: typography.fontSize.xl,
+                        fontWeight: typography.fontWeight.semibold,
+                        color: t212Summary.totalPpl >= 0 ? colors.status.success : colors.status.error,
                       }}
                     >
                       {showValues
@@ -526,36 +529,36 @@ export default function AllBalances() {
               <div
                 style={{
                   padding: 24,
-                  borderRadius: 8,
-                  border: '1px solid #f59e0b',
-                  backgroundColor: '#2a2a2a',
+                  borderRadius: borderRadius.lg,
+                  border: `1px solid ${colors.status.warning}`,
+                  backgroundColor: colors.bg.tertiary,
                   textAlign: 'center',
                 }}
               >
-                <div style={{ fontSize: 16, color: '#e0e0e0', marginBottom: 12 }}>
+                <div style={{ fontSize: typography.fontSize.md, color: colors.text.primary, marginBottom: 12 }}>
                   Trading212 Not Connected
                 </div>
-                <div style={{ fontSize: 14, color: '#a0a0a0', marginBottom: 20 }}>
+                <div style={{ fontSize: typography.fontSize.sm, color: colors.text.secondary, marginBottom: 20 }}>
                   Add your Trading212 API keys to view your investment account
                 </div>
                 <button
                   onClick={() => setShowT212Modal(true)}
                   style={{
                     padding: '12px 24px',
-                    backgroundColor: '#3b82f6',
+                    backgroundColor: colors.accent.primary,
                     color: 'white',
                     border: 'none',
-                    borderRadius: 6,
+                    borderRadius: borderRadius.md,
                     cursor: 'pointer',
-                    fontSize: 14,
-                    fontWeight: 600,
+                    fontSize: typography.fontSize.sm,
+                    fontWeight: typography.fontWeight.semibold,
                   }}
                 >
                   Add Trading212 Keys
                 </button>
               </div>
             ) : (
-              <div style={{ color: '#666', fontSize: 13 }}>Loading Trading212 data...</div>
+              <div style={{ color: colors.text.tertiary, fontSize: typography.fontSize.sm }}>Loading Trading212 data...</div>
             )}
           </div>
         </div>

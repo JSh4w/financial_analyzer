@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { BankClientDatafeed } from '../services/bankclient-datafeed'
 import { getAuthToken } from '../lib/auth'
+import { colors, borderRadius, typography } from '../theme'
 
 interface Balance {
   balanceAmount: {
@@ -64,20 +65,20 @@ export default function AccountBalances() {
 
   return (
     <div>
-      <h3 style={{ margin: '0 0 8px 0', color: '#e0e0e0' }}>Account Balances</h3>
-      <p style={{ margin: '0 0 24px 0', color: '#666' }}>
+      <h3 style={{ margin: '0 0 8px 0', color: colors.text.primary, fontSize: typography.fontSize.lg, fontWeight: typography.fontWeight.semibold }}>Account Balances</h3>
+      <p style={{ margin: '0 0 24px 0', color: colors.text.tertiary, fontSize: typography.fontSize.sm }}>
         View all your connected bank account balances
       </p>
 
-      {loading && <div style={{ color: '#666' }}>Loading balances...</div>}
-      {error && <div style={{ color: '#ef4444', padding: '16px', backgroundColor: '#7f1d1d', borderRadius: '8px' }}>Error: {error}</div>}
+      {loading && <div style={{ color: colors.text.tertiary }}>Loading balances...</div>}
+      {error && <div style={{ color: colors.status.error, padding: '16px', backgroundColor: 'rgba(239, 68, 68, 0.1)', borderRadius: borderRadius.lg, border: `1px solid ${colors.status.error}` }}>Error: {error}</div>}
 
       {!loading && !error && balancesData && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {/* Pending Requisitions Section */}
           {balancesData.pending_requisitions && balancesData.pending_requisitions.length > 0 && (
             <div>
-              <h4 style={{ margin: '0 0 16px 0', color: '#f59e0b', fontSize: '18px' }}>
+              <h4 style={{ margin: '0 0 16px 0', color: colors.status.warning, fontSize: typography.fontSize.lg, fontWeight: typography.fontWeight.semibold }}>
                 Pending Bank Connections ({balancesData.pending_requisitions.length})
               </h4>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -86,20 +87,20 @@ export default function AccountBalances() {
                     key={pending.requisition_id}
                     style={{
                       padding: 20,
-                      borderRadius: 8,
-                      border: '1px solid #f59e0b',
-                      backgroundColor: '#2a2a2a',
+                      borderRadius: borderRadius.lg,
+                      border: `1px solid ${colors.status.warning}`,
+                      backgroundColor: colors.bg.tertiary,
                     }}
                   >
                     <div style={{ marginBottom: 12 }}>
-                      <div style={{ fontSize: 18, fontWeight: '600', color: '#e0e0e0' }}>
+                      <div style={{ fontSize: typography.fontSize.lg, fontWeight: typography.fontWeight.semibold, color: colors.text.primary }}>
                         {pending.institution_name}
                       </div>
-                      <div style={{ fontSize: 13, color: '#f59e0b', marginTop: 4 }}>
+                      <div style={{ fontSize: typography.fontSize.sm, color: colors.status.warning, marginTop: 4 }}>
                         Status: {pending.status}
                       </div>
                     </div>
-                    <div style={{ fontSize: 14, color: '#a0a0a0', marginBottom: 16 }}>
+                    <div style={{ fontSize: typography.fontSize.sm, color: colors.text.secondary, marginBottom: 16 }}>
                       {pending.message}
                     </div>
                     {pending.link && (
@@ -110,12 +111,12 @@ export default function AccountBalances() {
                         style={{
                           display: 'inline-block',
                           padding: '10px 20px',
-                          background: '#3b82f6',
+                          background: colors.accent.primary,
                           color: 'white',
                           textDecoration: 'none',
-                          borderRadius: 6,
-                          fontSize: 14,
-                          fontWeight: 600,
+                          borderRadius: borderRadius.md,
+                          fontSize: typography.fontSize.sm,
+                          fontWeight: typography.fontWeight.semibold,
                         }}
                       >
                         Complete Authentication →
@@ -130,20 +131,20 @@ export default function AccountBalances() {
           {/* Active Balances Section */}
           {Object.keys(balancesData.balances).length > 0 && (
             <div>
-              <h4 style={{ margin: '0 0 16px 0', color: '#e0e0e0', fontSize: '18px' }}>Connected Banks</h4>
+              <h4 style={{ margin: '0 0 16px 0', color: colors.text.primary, fontSize: typography.fontSize.lg, fontWeight: typography.fontWeight.semibold }}>Connected Banks</h4>
               {Object.entries(balancesData.balances).map(([institutionName, balances]) => (
                 <div
                   key={institutionName}
                   style={{
                     padding: 20,
-                    borderRadius: 8,
-                    border: '1px solid #2a2a2a',
-                    backgroundColor: '#1a1a1a',
+                    borderRadius: borderRadius.lg,
+                    border: `1px solid ${colors.border.default}`,
+                    backgroundColor: colors.bg.secondary,
                     marginBottom: 16,
                   }}
                 >
                   <div style={{ marginBottom: 16 }}>
-                    <div style={{ fontSize: 20, fontWeight: '600', color: '#e0e0e0' }}>
+                    <div style={{ fontSize: typography.fontSize.xl, fontWeight: typography.fontWeight.semibold, color: colors.text.primary }}>
                       {institutionName}
                     </div>
                   </div>
@@ -155,24 +156,24 @@ export default function AccountBalances() {
                           key={idx}
                           style={{
                             padding: 16,
-                            borderRadius: 6,
-                            backgroundColor: '#2a2a2a',
+                            borderRadius: borderRadius.md,
+                            backgroundColor: colors.bg.tertiary,
                             display: 'flex',
                             justifyContent: 'space-between',
                             alignItems: 'center',
                           }}
                         >
                           <div>
-                            <div style={{ fontSize: 14, fontWeight: 500, color: '#a0a0a0' }}>
+                            <div style={{ fontSize: typography.fontSize.sm, fontWeight: typography.fontWeight.medium, color: colors.text.secondary }}>
                               {balance.balanceType}
                             </div>
                             {balance.referenceDate && (
-                              <div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>
+                              <div style={{ fontSize: typography.fontSize.xs, color: colors.text.tertiary, marginTop: 4 }}>
                                 As of {new Date(balance.referenceDate).toLocaleDateString()}
                               </div>
                             )}
                           </div>
-                          <div style={{ fontSize: 24, fontWeight: 700, color: '#10b981' }}>
+                          <div style={{ fontSize: typography.fontSize['2xl'], fontWeight: typography.fontWeight.bold, color: colors.status.success }}>
                             {formatCurrency(
                               balance.balanceAmount.amount,
                               balance.balanceAmount.currency
@@ -182,7 +183,7 @@ export default function AccountBalances() {
                       ))}
                     </div>
                   ) : (
-                    <div style={{ color: '#666', fontSize: 13 }}>No balances available</div>
+                    <div style={{ color: colors.text.tertiary, fontSize: typography.fontSize.sm }}>No balances available</div>
                   )}
                 </div>
               ))}
@@ -191,7 +192,7 @@ export default function AccountBalances() {
 
           {Object.keys(balancesData.balances).length === 0 &&
            (!balancesData.pending_requisitions || balancesData.pending_requisitions.length === 0) && (
-            <div style={{ color: '#888', textAlign: 'center', padding: 24 }}>
+            <div style={{ color: colors.text.secondary, textAlign: 'center', padding: 24 }}>
               No connected bank accounts found. Connect a bank to view your balances.
             </div>
           )}

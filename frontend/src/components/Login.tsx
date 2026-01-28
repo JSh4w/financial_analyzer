@@ -1,6 +1,7 @@
 import { Auth } from '@supabase/auth-ui-react'
 import { ThemeSupa } from '@supabase/auth-ui-shared'
 import { supabase } from '../lib/supabase'
+import { colors, borderRadius } from '../theme'
 
 interface LoginProps {
   onBack?: () => void
@@ -17,16 +18,16 @@ export default function Login({ onBack }: LoginProps) {
       justifyContent: 'center',
       alignItems: 'center',
       height: '100vh',
-      backgroundColor: '#0a0a0a'
+      backgroundColor: colors.bg.primary
     }}>
       <div style={{
         width: '100%',
         maxWidth: '400px',
         padding: '40px',
-        backgroundColor: '#1a1a1a',
-        borderRadius: '16px',
-        boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
-        border: '1px solid rgba(255,255,255,0.1)'
+        backgroundColor: colors.bg.secondary,
+        borderRadius: borderRadius['2xl'],
+        boxShadow: '0 4px 24px rgba(0,0,0,0.5)',
+        border: `1px solid ${colors.border.default}`
       }}>
         {onBack && (
           <button
@@ -37,15 +38,15 @@ export default function Login({ onBack }: LoginProps) {
               gap: '6px',
               background: 'none',
               border: 'none',
-              color: 'rgba(255,255,255,0.6)',
+              color: colors.text.secondary,
               fontSize: '14px',
               cursor: 'pointer',
               padding: '0',
               marginBottom: '20px',
               transition: 'color 0.2s ease'
             }}
-            onMouseOver={(e) => (e.currentTarget.style.color = '#ffffff')}
-            onMouseOut={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.6)')}
+            onMouseOver={(e) => (e.currentTarget.style.color = colors.text.primary)}
+            onMouseOut={(e) => (e.currentTarget.style.color = colors.text.secondary)}
           >
             ← Back to home
           </button>
@@ -56,7 +57,7 @@ export default function Login({ onBack }: LoginProps) {
           color: '#ffffff',
           fontSize: '24px',
           fontWeight: 700,
-          background: 'linear-gradient(135deg, #0d9488 0%, #2dd4bf 100%)',
+          background: `linear-gradient(135deg, ${colors.accent.primary} 0%, #60a5fa 100%)`,
           WebkitBackgroundClip: 'text',
           WebkitTextFillColor: 'transparent'
         }}>
@@ -69,13 +70,13 @@ export default function Login({ onBack }: LoginProps) {
             variables: {
               default: {
                 colors: {
-                  brand: '#0d9488',
-                  brandAccent: '#0f766e',
-                  inputBackground: '#0a0a0a',
-                  inputText: '#ffffff',
-                  inputBorder: 'rgba(255,255,255,0.2)',
-                  inputBorderFocus: '#0d9488',
-                  inputBorderHover: 'rgba(255,255,255,0.3)',
+                  brand: colors.accent.primary,
+                  brandAccent: colors.accent.hover,
+                  inputBackground: colors.bg.primary,
+                  inputText: colors.text.primary,
+                  inputBorder: colors.border.default,
+                  inputBorderFocus: colors.accent.primary,
+                  inputBorderHover: colors.border.hover,
                 }
               }
             }
