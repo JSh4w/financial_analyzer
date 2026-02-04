@@ -53,6 +53,9 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
+# brokerage imports
+from snaptrade_client import SnapTrade
+
 setup_logging(level="DEBUG")
 logger = getLogger(__name__)
 
@@ -157,11 +160,17 @@ def broadcast_update(update_data: dict):
             except asyncio.QueueFull:
                 # Mark for removal if queue is full
                 dead_users.append(user_id)
-                logger.warning("SSE queue full for %s user %s, removing connection", symbol, user_id)
+                logger.warning(
+                    "SSE queue full for %s user %s, removing connection",
+                    symbol,
+                    user_id,
+                )
             except Exception as e:
                 # Mark for removal if any other error
                 dead_users.append(user_id)
-                logger.warning("SSE broadcast error for %s user %s: %s", symbol, user_id, e)
+                logger.warning(
+                    "SSE broadcast error for %s user %s: %s", symbol, user_id, e
+                )
 
         # Clean up dead connections
         for dead_user in dead_users:
@@ -180,7 +189,9 @@ def broadcast_update(update_data: dict):
         logger.debug("No SSE connections for symbol %s", symbol)
 
 
-async def add_sse_connection(symbol: str, user_id: str, queue: asyncio.Queue) -> asyncio.Queue | None:
+async def add_sse_connection(
+    symbol: str, user_id: str, queue: asyncio.Queue
+) -> asyncio.Queue | None:
     """
     Add an SSE connection queue for a symbol and user.
     Returns the old queue if user already had a connection (for cleanup).
@@ -192,7 +203,11 @@ async def add_sse_connection(symbol: str, user_id: str, queue: asyncio.Queue) ->
     active_sse_connections[symbol][user_id] = queue
 
     if old_queue:
-        logger.info("Replacing existing SSE connection for user %s on symbol %s", user_id, symbol)
+        logger.info(
+            "Replacing existing SSE connection for user %s on symbol %s",
+            user_id,
+            symbol,
+        )
 
     return old_queue
 
@@ -202,7 +217,7 @@ async def remove_sse_connection(
     user_id: str,
     persistent_manager: PersistentSubscriptionManager = None,
     subscription_manager: SubscriptionManager = None,
-    demo_subscription_manager: SubscriptionManager = None
+    demo_subscription_manager: SubscriptionManager = None,
 ):
     """
     Remove an SSE connection for a symbol and user.
@@ -222,7 +237,9 @@ async def remove_sse_connection(
 
             # Check if we should unsubscribe from Alpaca WebSocket
             if persistent_manager and subscription_manager:
-                permanent_subscribers = persistent_manager.get_symbol_subscriber_count(symbol)
+                permanent_subscribers = persistent_manager.get_symbol_subscriber_count(
+                    symbol
+                )
 
                 logger.debug(
                     f"SSE closed for {symbol} (user {user_id}): {sse_connections_remaining} SSE remaining, "
@@ -231,15 +248,21 @@ async def remove_sse_connection(
 
                 # Only unsubscribe if NO SSE connections AND NO permanent subscribers
                 if sse_connections_remaining == 0 and permanent_subscribers == 0:
-                    manager = demo_subscription_manager if symbol == "FAKEPACA" else subscription_manager
+                    manager = (
+                        demo_subscription_manager
+                        if symbol == "FAKEPACA"
+                        else subscription_manager
+                    )
                     if manager:
                         try:
                             await manager.remove_user_subscription(
                                 user_id="system",
                                 symbol=symbol,
-                                subscription_type="trades"
+                                subscription_type="trades",
                             )
-                            logger.info(f"Unsubscribed from {symbol} on Alpaca (no active users)")
+                            logger.info(
+                                f"Unsubscribed from {symbol} on Alpaca (no active users)"
+                            )
                         except Exception as e:
                             logger.error(f"Failed to unsubscribe from {symbol}: {e}")
 
@@ -380,6 +403,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[Dict]:
                 logger.error(f"✗ Failed to rehydrate {symbol}: {e}")
     else:
         logger.info("No active subscriptions to rehydrate")
+
+    # brokerage singleton
+    snaptrade_client = SnapTrade()
 
     # Yield state to FastAPI - this makes it available via request.state
     yield {
@@ -783,9 +809,13 @@ async def stream_stock_data(
     symbol: str,
     token: str,
     data_aggregator: TradeDataAggregator = Depends(get_data_aggregator),
-    persistent_manager: PersistentSubscriptionManager = Depends(get_persistent_subscription_manager),
+    persistent_manager: PersistentSubscriptionManager = Depends(
+        get_persistent_subscription_manager
+    ),
     subscription_manager: SubscriptionManager = Depends(get_subscription_manager),
-    demo_subscription_manager: SubscriptionManager = Depends(get_demo_subscription_manager),
+    demo_subscription_manager: SubscriptionManager = Depends(
+        get_demo_subscription_manager
+    ),
 ):
     """Stream real-time OHLCV data for a symbol via SSE"""
     # Validate token from query parameter (EventSource doesn't support headers)
@@ -841,7 +871,9 @@ async def stream_stock_data(
 
                 # Check for termination signal (old connection being replaced)
                 if isinstance(update_data, dict) and update_data.get("_terminate"):
-                    logger.info("SSE connection replaced for user %s on %s", user_id, symbol)
+                    logger.info(
+                        "SSE connection replaced for user %s on %s", user_id, symbol
+                    )
                     break
 
                 yield f"data: {json.dumps(update_data)}\n\n"
@@ -856,7 +888,7 @@ async def stream_stock_data(
                 user_id,
                 persistent_manager=persistent_manager,
                 subscription_manager=subscription_manager,
-                demo_subscription_manager=demo_subscription_manager
+                demo_subscription_manager=demo_subscription_manager,
             )
 
     return StreamingResponse(
