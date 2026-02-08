@@ -34,6 +34,7 @@ from app.dependencies import (
     get_ws_manager,
 )
 from app.routes.banking import banking_router
+from app.routes.snaptrade import broker_route
 
 # API routes
 from app.routes.t212 import t212_router
@@ -405,7 +406,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[Dict]:
         logger.info("No active subscriptions to rehydrate")
 
     # brokerage singleton
-    snaptrade_client = SnapTrade()
+    brokerage_client = SnapTrade(
+        consumer_key=settings.SNAPTRADE_CONSUMER_KEY,
+        client_id=settings.SNAPTRADE_CLIENT_ID,
+    )
 
     # Yield state to FastAPI - this makes it available via request.state
     yield {
@@ -422,6 +426,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[Dict]:
         "banking_client": banking_client,
         "supabase_db": supabase_db,
         "persistent_subscription_manager": persistent_subscription_manager,
+        "brokerage_client": brokerage_client,
     }
 
     # SHUTDOWN: Clean up when app stops
@@ -465,6 +470,7 @@ app.add_middleware(
 
 app.include_router(t212_router)
 app.include_router(banking_router)
+app.include_router(broker_route)
 
 
 @app.get("/health")

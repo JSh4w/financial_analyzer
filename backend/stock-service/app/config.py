@@ -37,3 +37,5 @@ class Settings(BaseSettings):
     GO_CARDLESS_SECRET_KEY: str = "demo"
     GO_CARDLESS_SECRET_ID: str = "demo"
     BANK_ENCRYPTION_KEY: str = "demo_key"
+    SNAPTRADE_CONSUMER_KEY: str = "demo_key"
+    SNAPTRADE_CLIENT_ID: str = "demo_id"
