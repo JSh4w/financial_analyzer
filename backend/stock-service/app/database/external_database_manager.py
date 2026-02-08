@@ -348,3 +348,56 @@ class DatabaseManager:
         except Exception as e:
             logger.error("Failed to store/update balance: %s", e)
             return None
+
+    # SnapTrade user storage methods
+    def store_snaptrade_user(self, user_id: str, user_secret: str) -> bool:
+        """Store SnapTrade user_secret (encrypted) for a user."""
+        try:
+            encrypted_secret = self.encrypt_string(user_secret)
+            data = {
+                "user_id": user_id,
+                "user_secret": encrypted_secret,
+            }
+            # Upsert to handle both insert and update cases
+            result = (
+                self.client.table("snaptrade_users")
+                .upsert(data, on_conflict="user_id")
+                .execute()
+            )
+            logger.info("Stored SnapTrade user: %s", user_id)
+            return True
+        except Exception as e:
+            logger.error("Failed to store SnapTrade user: %s", e)
+            return False
+
+    def get_snaptrade_user_secret(self, user_id: str) -> str | None:
+        """Get stored user_secret for SnapTrade (decrypted)."""
+        try:
+            result = (
+                self.client.table("snaptrade_users")
+                .select("user_secret")
+                .eq("user_id", user_id)
+                .single()
+                .execute()
+            )
+            if result.data and result.data.get("user_secret"):
+                return self.decrypt_string(result.data["user_secret"])
+            return None
+        except Exception as e:
+            logger.error("Failed to get SnapTrade user secret: %s", e)
+            return None
+
+    def delete_snaptrade_user(self, user_id: str) -> bool:
+        """Delete SnapTrade user record."""
+        try:
+            result = (
+                self.client.table("snaptrade_users")
+                .delete()
+                .eq("user_id", user_id)
+                .execute()
+            )
+            logger.info("Deleted SnapTrade user: %s", user_id)
+            return True
+        except Exception as e:
+            logger.error("Failed to delete SnapTrade user: %s", e)
+            return False
