@@ -7,6 +7,7 @@ import { getAuthToken } from '../lib/auth'
 import SelectBank from './SelectBank'
 import AccountBalances from './AccountBalances'
 import AllBalances from './AllBalances'
+import SelectBrokerage from './SelectBrokerage'
 import Sidebar from './Sidebar'
 import SearchBar from './SearchBar'
 import { colors, borderRadius, typography } from '../theme'
@@ -36,7 +37,7 @@ interface StockSubscription {
 }
 
 type View = 'stocks' | 'portfolio'
-type PortfolioSubView = 'all' | 'connect' | 'balances'
+type PortfolioSubView = 'all' | 'connect' | 'balances' | 'brokerage'
 
 export default function Dashboard() {
   const [searchSymbol, setSearchSymbol] = useState('')
@@ -740,6 +741,22 @@ export default function Dashboard() {
                   >
                     Bank Balances
                   </button>
+                  <button
+                    onClick={() => setPortfolioSubView('brokerage')}
+                    style={{
+                      padding: '12px 20px',
+                      backgroundColor: 'transparent',
+                      border: 'none',
+                      color: portfolioSubView === 'brokerage' ? colors.accent.primary : colors.text.secondary,
+                      cursor: 'pointer',
+                      fontSize: typography.fontSize.sm,
+                      fontWeight: typography.fontWeight.medium,
+                      borderBottom: portfolioSubView === 'brokerage' ? `2px solid ${colors.accent.primary}` : '2px solid transparent',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    Connect Brokerage
+                  </button>
                 </div>
 
                 {/* Bank Connection Status Messages */}
@@ -780,6 +797,10 @@ export default function Dashboard() {
 
                 {portfolioSubView === 'balances' && (
                   <AccountBalances />
+                )}
+
+                {portfolioSubView === 'brokerage' && (
+                  <SelectBrokerage onSuccess={() => setPortfolioSubView('all')} />
                 )}
               </div>
             ) : activeStocks.size === 0 ? (
