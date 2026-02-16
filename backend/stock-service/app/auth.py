@@ -1,5 +1,7 @@
 """JWT authentication utilities for validating Supabase tokens"""
 
+import asyncio
+import logging
 from typing import Any, Dict, List, Optional, Union
 
 import jwt
@@ -8,6 +10,8 @@ from fastapi import HTTPException, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt import PyJWKClient
 from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
 
 settings = Settings()
 security = HTTPBearer()
@@ -20,6 +24,36 @@ security_optional = HTTPBearer(
 jwks_client = None
 if hasattr(settings, "SUPABASE_JWKS_URL") and settings.SUPABASE_JWKS_URL:
     jwks_client = PyJWKClient(settings.SUPABASE_JWKS_URL, cache_keys=True)
+
+
+async def warmup_jwks(max_retries: int = 5, base_delay: float = 2.0):
+    """Pre-fetch JWKS signing keys on startup with retries.
+
+    Avoids auth failures during the first requests when DNS/network
+    may not be ready yet (common in containerized/codespace environments).
+    """
+    if not jwks_client:
+        return
+
+    for attempt in range(max_retries):
+        try:
+            await asyncio.to_thread(jwks_client.get_jwk_set)
+            logger.info("JWKS keys fetched and cached successfully")
+            return
+        except Exception as e:
+            if attempt < max_retries - 1:
+                delay = base_delay * (2 ** attempt)
+                logger.warning(
+                    "JWKS fetch attempt %d/%d failed: %s, retrying in %.1fs",
+                    attempt + 1, max_retries, e, delay,
+                )
+                await asyncio.sleep(delay)
+            else:
+                logger.error(
+                    "Failed to fetch JWKS keys after %d attempts: %s. "
+                    "Auth will attempt to fetch on first request.",
+                    max_retries, e,
+                )
 
 
 class TokenPayload(BaseModel):
