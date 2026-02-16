@@ -11,8 +11,8 @@ from typing import Dict, List, TypedDict
 
 import httpx
 
-# AUthentication
-from app.auth import get_current_user_id
+# Authentication
+from app.auth import get_current_user_id, warmup_jwks
 from app.config import Settings  # Configuration settings
 from app.database.connection import DuckDBConnection
 from app.database.external_database_manager import DatabaseManager
@@ -404,6 +404,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[Dict]:
                 logger.error(f"✗ Failed to rehydrate {symbol}: {e}")
     else:
         logger.info("No active subscriptions to rehydrate")
+
+    # Pre-fetch JWKS keys so auth works immediately on first request
+    await warmup_jwks()
 
     # brokerage singleton
     brokerage_client = SnapTrade(

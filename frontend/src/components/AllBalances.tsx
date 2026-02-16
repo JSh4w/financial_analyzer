@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { BankClientDatafeed } from '../services/bankclient-datafeed'
 import { T212Service, T212Summary, T212Error } from '../services/t212-service'
+import { SnapTradeService, BrokerageAccountHoldings, SnapTradeError } from '../services/snaptrade-service'
 import { getAuthToken } from '../lib/auth'
 import { colors, borderRadius, typography } from '../theme'
 
@@ -185,11 +186,14 @@ export default function AllBalances() {
   const [t212NotFound, setT212NotFound] = useState(false)
   const [showT212Modal, setShowT212Modal] = useState(false)
   const [addingKeys, setAddingKeys] = useState(false)
+  const [brokerageHoldings, setBrokerageHoldings] = useState<BrokerageAccountHoldings[]>([])
+  const [brokerageNotConnected, setBrokerageNotConnected] = useState(false)
 
   const loadData = async () => {
     setLoading(true)
     setError(null)
     setT212NotFound(false)
+    setBrokerageNotConnected(false)
 
     try {
       const token = await getAuthToken()
@@ -212,6 +216,19 @@ export default function AllBalances() {
           setT212NotFound(true)
         } else {
           console.error('Error loading T212 data:', err)
+        }
+      }
+
+      // Try to load brokerage holdings
+      const snaptradeService = new SnapTradeService()
+      try {
+        const holdingsData = await snaptradeService.getHoldings(token)
+        setBrokerageHoldings(holdingsData.holdings || [])
+      } catch (err) {
+        if (err instanceof SnapTradeError && err.statusCode === 404) {
+          setBrokerageNotConnected(true)
+        } else {
+          console.error('Error loading brokerage data:', err)
         }
       }
     } catch (err) {
@@ -275,9 +292,37 @@ export default function AllBalances() {
     return total
   }
 
+  const calculateBrokerageTotal = () => {
+    let total = 0
+    brokerageHoldings.forEach((account) => {
+      // Use total_value if available
+      if (account.total_value?.value) {
+        total += account.total_value.value
+        return
+      }
+      // Otherwise sum positions + cash balances
+      if (account.positions) {
+        account.positions.forEach((pos) => {
+          if (pos.units && pos.price) {
+            total += pos.units * pos.price
+          }
+        })
+      }
+      if (account.balances) {
+        account.balances.forEach((bal) => {
+          if (bal.cash) {
+            total += bal.cash
+          }
+        })
+      }
+    })
+    return total
+  }
+
   const totalBankBalance = calculateTotalBankBalance()
   const totalT212Balance = t212Summary?.totalWorth || 0
-  const grandTotal = totalBankBalance + totalT212Balance
+  const totalBrokerageBalance = calculateBrokerageTotal()
+  const grandTotal = totalBankBalance + totalT212Balance + totalBrokerageBalance
 
   return (
     <div>
@@ -339,7 +384,8 @@ export default function AllBalances() {
             </div>
             <div style={{ fontSize: typography.fontSize.sm, color: colors.text.tertiary, marginTop: 12 }}>
               Bank: {showValues ? formatCurrency(totalBankBalance, 'GBP') : obfuscateValue()} |
-              Trading212: {showValues ? formatCurrency(totalT212Balance, 'GBP') : obfuscateValue()}
+              Trading212: {showValues ? formatCurrency(totalT212Balance, 'GBP') : obfuscateValue()} |
+              Brokerages: {showValues ? formatCurrency(totalBrokerageBalance, 'GBP') : obfuscateValue()}
             </div>
           </div>
 
@@ -559,6 +605,129 @@ export default function AllBalances() {
               </div>
             ) : (
               <div style={{ color: colors.text.tertiary, fontSize: typography.fontSize.sm }}>Loading Trading212 data...</div>
+            )}
+          </div>
+
+          {/* Brokerage Holdings Section */}
+          <div>
+            <h4 style={{ margin: '0 0 16px 0', color: colors.text.primary, fontSize: typography.fontSize.lg, fontWeight: typography.fontWeight.semibold }}>
+              Brokerage Accounts
+            </h4>
+            {brokerageHoldings.length > 0 ? (
+              brokerageHoldings.map((account, accountIdx) => (
+                <div
+                  key={account.account?.id || accountIdx}
+                  style={{
+                    padding: 20,
+                    borderRadius: borderRadius.lg,
+                    border: `1px solid ${colors.border.default}`,
+                    backgroundColor: colors.bg.secondary,
+                    marginBottom: 16,
+                  }}
+                >
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={{ fontSize: typography.fontSize.xl, fontWeight: typography.fontWeight.semibold, color: colors.text.primary }}>
+                      {account.account?.name || `Brokerage Account ${accountIdx + 1}`}
+                    </div>
+                    {account.account?.number && (
+                      <div style={{ fontSize: typography.fontSize.xs, color: colors.text.tertiary, marginTop: 4 }}>
+                        Account: {account.account.number}
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    {/* Cash balances */}
+                    {account.balances?.map((bal, idx) => (
+                      <div
+                        key={`cash-${idx}`}
+                        style={{
+                          padding: 16,
+                          borderRadius: borderRadius.md,
+                          backgroundColor: colors.bg.tertiary,
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontSize: typography.fontSize.sm, fontWeight: typography.fontWeight.medium, color: colors.text.secondary }}>
+                            Cash ({bal.currency?.code || 'USD'})
+                          </div>
+                        </div>
+                        <div style={{ fontSize: typography.fontSize['2xl'], fontWeight: typography.fontWeight.bold, color: colors.status.success }}>
+                          {showValues
+                            ? formatCurrency(bal.cash || 0, bal.currency?.code || 'USD')
+                            : obfuscateValue()}
+                        </div>
+                      </div>
+                    ))}
+
+                    {/* Positions */}
+                    {account.positions?.map((pos, idx) => {
+                      const totalValue = (pos.units || 0) * (pos.price || 0)
+                      const pnl = pos.average_purchase_price
+                        ? ((pos.price || 0) - pos.average_purchase_price) * (pos.units || 0)
+                        : null
+                      return (
+                        <div
+                          key={`pos-${idx}`}
+                          style={{
+                            padding: 16,
+                            borderRadius: borderRadius.md,
+                            backgroundColor: colors.bg.tertiary,
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                          }}
+                        >
+                          <div>
+                            <div style={{ fontSize: typography.fontSize.sm, fontWeight: typography.fontWeight.medium, color: colors.text.primary }}>
+                              {pos.symbol?.symbol || 'Unknown'}
+                            </div>
+                            <div style={{ fontSize: typography.fontSize.xs, color: colors.text.tertiary, marginTop: 2 }}>
+                              {pos.units} units @ {showValues ? formatCurrency(pos.price || 0, pos.currency?.code || 'USD') : obfuscateValue()}
+                            </div>
+                            {pnl !== null && (
+                              <div style={{ fontSize: typography.fontSize.xs, color: pnl >= 0 ? colors.status.success : colors.status.error, marginTop: 2 }}>
+                                P/L: {showValues ? formatCurrency(pnl, pos.currency?.code || 'USD') : obfuscateValue()}
+                              </div>
+                            )}
+                          </div>
+                          <div style={{ fontSize: typography.fontSize.xl, fontWeight: typography.fontWeight.semibold, color: colors.text.primary }}>
+                            {showValues
+                              ? formatCurrency(totalValue, pos.currency?.code || 'USD')
+                              : obfuscateValue()}
+                          </div>
+                        </div>
+                      )
+                    })}
+
+                    {(!account.positions || account.positions.length === 0) && (!account.balances || account.balances.length === 0) && (
+                      <div style={{ color: colors.text.tertiary, fontSize: typography.fontSize.sm }}>No holdings data available</div>
+                    )}
+                  </div>
+                </div>
+              ))
+            ) : brokerageNotConnected ? (
+              <div
+                style={{
+                  padding: 24,
+                  borderRadius: borderRadius.lg,
+                  border: `1px solid ${colors.status.warning}`,
+                  backgroundColor: colors.bg.tertiary,
+                  textAlign: 'center',
+                }}
+              >
+                <div style={{ fontSize: typography.fontSize.md, color: colors.text.primary, marginBottom: 12 }}>
+                  No Brokerage Connected
+                </div>
+                <div style={{ fontSize: typography.fontSize.sm, color: colors.text.secondary, marginBottom: 20 }}>
+                  Connect a brokerage account to view your investment holdings
+                </div>
+              </div>
+            ) : (
+              <div style={{ color: colors.text.tertiary, fontSize: typography.fontSize.sm }}>Loading brokerage data...</div>
             )}
           </div>
         </div>

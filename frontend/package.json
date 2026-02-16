@@ -18,7 +18,8 @@
     "echarts": "^6.0.0",
     "lightweight-charts": "^5.0.9",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "snaptrade-react": "^3.2.5"
   },
   "devDependencies": {
     "@eslint/js": "^9.21.0",
