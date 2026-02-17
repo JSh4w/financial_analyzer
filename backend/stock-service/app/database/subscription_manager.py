@@ -1,8 +1,7 @@
 """Persistent Subscription Manager for user stock subscriptions in database"""
 
 import logging
-import time
-from typing import List, Optional
+from typing import List
 
 from app.database.external_database_manager import DatabaseManager
 
@@ -14,9 +13,6 @@ class PersistentSubscriptionManager:
 
     def __init__(self, db: DatabaseManager):
         self.db = db
-        # Optional: In-memory cache for active symbols (refreshed every 60s)
-        self._active_symbols_cache: Optional[List[str]] = None
-        self._cache_timestamp: Optional[float] = None
 
     def subscribe_user(self, user_id: str, symbol: str) -> bool:
         """
@@ -47,9 +43,6 @@ class PersistentSubscriptionManager:
                 .execute()
             )
 
-            # Invalidate cache
-            self._active_symbols_cache = None
-
             logger.info(f"User {user_id} subscribed to {symbol}")
             return True
 
@@ -78,9 +71,6 @@ class PersistentSubscriptionManager:
                 .eq("symbol", symbol)
                 .execute()
             )
-
-            # Invalidate cache
-            self._active_symbols_cache = None
 
             logger.info(f"User {user_id} unsubscribed from {symbol}")
             return True
@@ -117,48 +107,27 @@ class PersistentSubscriptionManager:
             logger.error(f"Failed to get subscriptions for user {user_id}: {e}")
             return []
 
-    def get_active_symbols(self, use_cache: bool = True) -> List[str]:
+    def get_all_active_subscriptions(self) -> List[tuple]:
         """
-        Get all symbols with at least one active subscriber
-        Uses caching to reduce database load (cache refreshes every 60 seconds)
-
-        Args:
-            use_cache: Whether to use cached results (default: True)
+        Get all active (user_id, symbol) pairs for rehydration on startup.
 
         Returns:
-            List of unique stock symbols with active subscribers
+            List of (user_id, symbol) tuples
         """
-        # Check cache (refresh every 60 seconds)
-        if (
-            use_cache
-            and self._active_symbols_cache is not None
-            and self._cache_timestamp is not None
-        ):
-            now = time.time()
-            if now - self._cache_timestamp < 60:
-                return self._active_symbols_cache
-
         try:
-            # Query distinct symbols with active subscriptions
             response = (
                 self.db.client.table("user_subscriptions")
-                .select("symbol")
+                .select("user_id, symbol")
                 .eq("is_active", True)
                 .execute()
             )
 
-            # Get unique symbols
-            symbols = list(set([row["symbol"] for row in response.data]))
-
-            # Update cache
-            self._active_symbols_cache = symbols
-            self._cache_timestamp = time.time()
-
-            logger.info(f"Retrieved {len(symbols)} active symbols from database")
-            return symbols
+            pairs = [(row["user_id"], row["symbol"]) for row in response.data]
+            logger.info(f"Retrieved {len(pairs)} active user-symbol pairs from database")
+            return pairs
 
         except Exception as e:
-            logger.error(f"Failed to get active symbols: {e}")
+            logger.error(f"Failed to get all active subscriptions: {e}")
             return []
 
     def get_symbol_subscriber_count(self, symbol: str) -> int:

@@ -1,18 +1,16 @@
 # backend/python-service/app/main_test.py
-from typing import Optional, Any, Set, Dict, List
-from dataclasses import dataclass, field
-from collections import defaultdict
-import json
 import asyncio
-import logging
 import copy
-import time 
+import json
+import logging
+from collections import defaultdict
+from dataclasses import dataclass, field
 from enum import Enum
+from typing import Any, Dict, List, Optional, Set
 
 import websockets
-
-from app.stocks.errors import ConnectionFailedError
 from app.config import Settings
+from app.stocks.errors import ConnectionFailedError
 
 settings = Settings()
 logger = logging.getLogger(__name__)
@@ -24,7 +22,7 @@ class SubscriptionConfig:
 
     subscription_type: str  # 'trades', 'quotes', 'bars'
     max_symbols: Optional[int] = None  # None means unlimited
-    message_type_identifier: str = None  # 't' for trades, 'q' for quotes, 'b' for bars
+    message_type_identifier: str = "t"  # 't' for trades, 'q' for quotes, 'b' for bars
 
     def __post_init__(self):
         if self.message_type_identifier is None:
@@ -68,7 +66,7 @@ class SubscriptionRequest:
     action: str  # 'subscribe' or 'unsubscribe'
     symbol: str
     subscription_type: str = "trades"  # Default to trades for backward compatibility
-    user_id: Optional[int] = None  # For tracking/logging
+    user_id: Optional[str] = None  # For tracking/logging
 
 
 class ConnectionState(Enum):
@@ -112,7 +110,7 @@ class WebSocketManager:
         self.output_queue = output_queue
 
         # symbol -> subscription_type -> users
-        self.active_subscriptions: Dict[str, Dict[str, Set[int]]] = {}
+        self.active_subscriptions: Dict[str, Dict[str, Set[str]]] = {}
         self._subscription_task: Optional[asyncio.Task] = None
 
         self._max_reconnect_attempts = 3
@@ -124,7 +122,7 @@ class WebSocketManager:
 
     async def connect(self):
         """Try connecting to Alpaca, return True if connected"""
-        logger.info("Attempting to connect to WebSocket: %s",self._uri)
+        logger.info("Attempting to connect to WebSocket: %s", self._uri)
         async with self._state_lock:
             if self.state == ConnectionState.CONNECTED:
                 logger.info("Already connected")
@@ -138,7 +136,6 @@ class WebSocketManager:
             # If reconnecting or disconnecting I want to proceed
             self.state = ConnectionState.CONNECTING
         try:
-
             async with self._state_lock:
                 # Reconnect all symbols
                 self._websocket = await websockets.connect(
@@ -153,14 +150,14 @@ class WebSocketManager:
                 # 2. Authentication response
                 raw_auth = await asyncio.wait_for(self._websocket.recv(), timeout=10)
                 auth_data = json.loads(raw_auth)
-                logger.info("Auth response: %s",auth_data)
-                if isinstance(auth_data, list) and len(auth_data) >0:
+                logger.info("Auth response: %s", auth_data)
+                if isinstance(auth_data, list) and len(auth_data) > 0:
                     first_msg = auth_data[0]
-                    if auth_data[0].get('T')=='error':
-                        code, msg = first_msg.get('code'), first_msg.get('msg')
-                        logger.error("Auth failed %s, %s", code,msg)
+                    if auth_data[0].get("T") == "error":
+                        code, msg = first_msg.get("code"), first_msg.get("msg")
+                        logger.error("Auth failed %s, %s", code, msg)
                         self.state = ConnectionState.DISCONNECTED
-                        raise ConnectionFailedError(msg,code)
+                        raise ConnectionFailedError(msg, code)
                 self.state = ConnectionState.CONNECTED
                 logger.info("Connected to Alpaca WebSocket")
                 # Snapshot of active subscriptions
@@ -187,8 +184,6 @@ class WebSocketManager:
                 self.state = ConnectionState.DISCONNECTED
             raise e
 
-
-
     async def disconnect(self):
         """Close WebSocket connection and clear attributed"""
         if self._websocket:
@@ -204,7 +199,7 @@ class WebSocketManager:
         logger.info("Disconnected from WebSocket")
 
     async def subscribe(
-        self, symbol: str, user_id: int, subscription_type: str = "trades"
+        self, symbol: str, user_id: str, subscription_type: str = "trades"
     ) -> bool:
         """Subscribe to a symbol and optionally register a data handler
         to update database, notify frontend or process data"""
@@ -215,7 +210,8 @@ class WebSocketManager:
         if config.max_symbols is not None:
             current_count = len(
                 [
-                    s for s in self.active_subscriptions
+                    s
+                    for s in self.active_subscriptions
                     if subscription_type in self.active_subscriptions[s]
                 ]
             )
@@ -234,7 +230,7 @@ class WebSocketManager:
             # Already subscribed to this symbol+type combo
             if user_id in self.active_subscriptions[symbol][subscription_type]:
                 logger.info(
-                    "User %d already subscribed to %s %s",
+                    "User %s already subscribed to %s %s",
                     user_id,
                     symbol,
                     subscription_type,
@@ -286,7 +282,7 @@ class WebSocketManager:
             return False
 
     async def unsubscribe(
-        self, symbol: str, user_id: int, subscription_type: str = "trades"
+        self, symbol: str, user_id: str, subscription_type: str = "trades"
     ) -> bool:
         """Unsubscribe a symbol from websocket and data handler"""
         symbol = symbol.upper()
@@ -359,7 +355,7 @@ class WebSocketManager:
             )
             return False
 
-    async def get_subscriptions(self, user_id: Optional[int]) -> Set[str]:
+    async def get_subscriptions(self, user_id: Optional[str]) -> Set[str]:
         """Get the set of current subscriptions"""
         # Not used elsewhere so no locks
         if user_id:
@@ -368,7 +364,7 @@ class WebSocketManager:
             for symbol, trade_list in self.active_subscriptions.items():
                 for trade_type in trade_list:
                     if user_id in trade_list[trade_type]:
-                        user_stocks.add((symbol,trade_type))
+                        user_stocks.add((symbol, trade_type))
 
             return user_stocks
         else:
@@ -396,7 +392,7 @@ class WebSocketManager:
     async def _auto_reconnect(self) -> bool:
         """Reconnect if connection is broken with exponential backoff"""
 
-        for attempt in range(0, self._max_reconnect_attempts+1):
+        for attempt in range(0, self._max_reconnect_attempts + 1):
             # Exponential backoff: delay grows with consecutive failures
             # 2s, 4s, 8s, 16s, 32s, 60s (max)
             base_delay = self._reconnect_delay * attempt
@@ -413,13 +409,19 @@ class WebSocketManager:
                     return True
             except ConnectionFailedError as e:
                 if int(e.code) in [401, 403, 404]:
-                    logger.critical("FATAL ERROR: Server rejected handshake with %s.",e.code)
+                    logger.critical(
+                        "FATAL ERROR: Server rejected handshake with %s.", e.code
+                    )
                     logger.critical("Check your API Key and URL. NOT Retrying.")
-                    raise ConnectionFailedError(e.message,e.code) from e 
+                    raise ConnectionFailedError(e.message, e.code) from e
             except websockets.exceptions.ConnectionClosed as e:
                 if e.code in [1008, 1002, 1003]:
-                    logger.critical("FATAL: Connection closed by server. Code: %s" , e.code)
-                    raise ConnectionFailedError("Connection closed by server",e.code) from e
+                    logger.critical(
+                        "FATAL: Connection closed by server. Code: %s", e.code
+                    )
+                    raise ConnectionFailedError(
+                        "Connection closed by server", e.code
+                    ) from e
                 if e.code in [1006]:
                     logger.info("Improper handshake closing, try again")
                     await self.disconnect()
@@ -429,14 +431,13 @@ class WebSocketManager:
                 await self.disconnect()
                 continue
             except Exception as e:
-                logger.info("Unknown error: %s,  trying again",e)
+                logger.info("Unknown error: %s,  trying again", e)
                 await self.disconnect()
                 continue
             finally:
                 if attempt == self._max_reconnect_attempts:
                     logger.info("Sleeping for 10 minutes ")
-                    await asyncio.sleep(600)   
-
+                    await asyncio.sleep(600)
 
     async def _process_message(self, message: str):
         """Process incoming Alpaca WebSocket messages"""
@@ -487,14 +488,16 @@ class WebSocketManager:
                             message = message.decode("utf-8")
                         logger.info("Processing message %s", message)
                         await self._process_message(message)
-            #Error code during connection
+            # Error code during connection
             except ConnectionFailedError as e:
-                logger.warning("FAIL: %s",e)
-                return 
+                logger.warning("FAIL: %s", e)
+                return
             # # Closed from the server side
             except websockets.exceptions.ConnectionClosed as e:
                 if e.code in [1008, 1002, 1003]:
-                    logger.critical("FATAL: Connection closed by server. Code: %s" , e.code)
+                    logger.critical(
+                        "FATAL: Connection closed by server. Code: %s", e.code
+                    )
                     return
                 logger.warning("Connection lost. Code: %s", e.code)
                 await self.disconnect()
@@ -509,6 +512,7 @@ class WebSocketManager:
                 if self._websocket:
                     await self._websocket.close()
                 break
+
     async def start(self):
         """Start the WebSocket manager"""
         if self.connection_task and not self.connection_task.done():
@@ -537,7 +541,7 @@ class WebSocketManager:
 
     # Handling the queueing aspect
     async def enqueue_subscription(
-        self, symbol: str, user_id: int, action: str = "subscribe"
+        self, symbol: str, user_id: str, action: str = "subscribe"
     ):
         """External interface for queueinng subscription requests"""
         request = SubscriptionRequest(action=action, symbol=symbol, user_id=user_id)
@@ -549,7 +553,7 @@ class WebSocketManager:
             return False
         return True
 
-    async def enqueue_unsubscription(self, symbol: str, user_id: int):
+    async def enqueue_unsubscription(self, symbol: str, user_id: str):
         """External interface for queueing unsubscription requests"""
         return await self.enqueue_subscription(symbol, user_id, "unsubscribe")
 

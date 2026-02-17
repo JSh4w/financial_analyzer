@@ -84,7 +84,7 @@ class State(TypedDict):
 
 # SSE connection management
 # Structure: {symbol: {user_id: asyncio.Queue}}
-active_sse_connections: Dict[str, Dict[str, asyncio.Queue]] = {}
+active_sse_connections: Dict[str, Dict[str, asyncio.Queue[Dict]]] = {}
 
 # Since each person consumes a queue, we need one per news connection
 active_news_connections: List[asyncio.Queue] = []
@@ -157,7 +157,7 @@ def broadcast_update(update_data: dict):
                     successful_broadcasts += 1
                     # Mark queue as initialized after first message
                     if is_initial:
-                        queue._initialized = True
+                        queue._initialized = True  # type: ignore[reportAttributeAccessIssue] pylint: disable=protected-access
             except asyncio.QueueFull:
                 # Mark for removal if queue is full
                 dead_users.append(user_id)
@@ -216,9 +216,9 @@ async def add_sse_connection(
 async def remove_sse_connection(
     symbol: str,
     user_id: str,
-    persistent_manager: PersistentSubscriptionManager = None,
-    subscription_manager: SubscriptionManager = None,
-    demo_subscription_manager: SubscriptionManager = None,
+    persistent_manager: PersistentSubscriptionManager,
+    subscription_manager: SubscriptionManager,
+    demo_subscription_manager: SubscriptionManager,
 ):
     """
     Remove an SSE connection for a symbol and user.
@@ -257,7 +257,7 @@ async def remove_sse_connection(
                     if manager:
                         try:
                             await manager.remove_user_subscription(
-                                user_id="system",
+                                user_id=user_id,
                                 symbol=symbol,
                                 subscription_type="trades",
                             )
@@ -378,30 +378,26 @@ async def lifespan(app: FastAPI) -> AsyncIterator[Dict]:
     logger.info("Persistent SubscriptionManager initialized")
 
     # Rehydrate subscriptions from database
-    active_symbols = persistent_subscription_manager.get_active_symbols(use_cache=False)
+    active_subscriptions = persistent_subscription_manager.get_all_active_subscriptions()
 
-    if active_symbols:
-        logger.info(
-            f"Rehydrating {len(active_symbols)} subscriptions from database: {active_symbols}"
-        )
-        for symbol in active_symbols:
+    if active_subscriptions:
+        logger.info(f"Rehydrating {len(active_subscriptions)} user-symbol subscriptions from database")
+        for user_id, symbol in active_subscriptions:
             try:
-                # Determine which manager to use (demo or production)
                 manager = (
                     demo_subscription_manager
                     if symbol == "FAKEPACA"
                     else subscription_manager
                 )
 
-                # Subscribe to WebSocket (uses dummy user_id since this is system-level)
                 await manager.add_user_subscription(
-                    user_id="system",  # System-initiated subscription
+                    user_id=user_id,
                     symbol=symbol,
                     subscription_type="trades",
                 )
-                logger.info(f"✓ Rehydrated subscription for {symbol}")
+                logger.info(f"✓ Rehydrated {symbol} for user {user_id}")
             except Exception as e:
-                logger.error(f"✗ Failed to rehydrate {symbol}: {e}")
+                logger.error(f"✗ Failed to rehydrate {symbol} for user {user_id}: {e}")
     else:
         logger.info("No active subscriptions to rehydrate")
 

@@ -59,7 +59,7 @@ async def test_full_subscription_flow_without_websocket():
 
     # Execute subscription
     result = await subscription_manager.add_user_subscription(
-        user_id=123,
+        user_id="123",
         symbol="AAPL",
         subscription_type="trades"
     )
@@ -72,7 +72,7 @@ async def test_full_subscription_flow_without_websocket():
 
     # Verify flow
     assert len(ws_subscribe_calls) == 1
-    assert ws_subscribe_calls[0] == ("AAPL", 123, "trades")
+    assert ws_subscribe_calls[0] == ("AAPL", "123", "trades")
 
     # Verify handler was created
     assert 'AAPL' in aggregator.stock_handlers
