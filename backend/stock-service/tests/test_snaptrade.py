@@ -1,14 +1,13 @@
 """Test SnapTrade API endpoints"""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import httpx
 import pytest
-from fastapi.testclient import TestClient
-
 from app.auth import get_current_user_id
 from app.dependencies import get_brokerage_client, get_supabase_db
 from app.main import app
+from fastapi.testclient import TestClient
 
 
 @pytest.fixture
@@ -26,18 +25,21 @@ def mock_snaptrade_client():
     login_response.body = "https://app.snaptrade.com/connect?token=abc123"
     client.authentication.login_snap_trade_user.return_value = login_response
 
-    # Mock holdings response
-    holdings_response = MagicMock()
-    holdings_response.body = [
-        {
-            "account": {"id": "acc-123", "name": "My Brokerage"},
-            "balances": [{"currency": "USD", "cash": 1000.00}],
-            "positions": [
-                {"symbol": "AAPL", "units": 10, "price": 150.00}
-            ],
-        }
+    # Mock list_user_accounts response
+    accounts_response = MagicMock()
+    accounts_response.body = [
+        {"id": "acc-123", "name": "My Brokerage"},
     ]
-    client.account_information.get_all_user_holdings.return_value = holdings_response
+    client.account_information.list_user_accounts.return_value = accounts_response
+
+    # Mock get_user_holdings response (per-account)
+    holdings_response = MagicMock()
+    holdings_response.body = {
+        "account": {"id": "acc-123", "name": "My Brokerage"},
+        "balances": [{"currency": "USD", "cash": 1000.00}],
+        "positions": [{"symbol": "AAPL", "units": 10, "price": 150.00}],
+    }
+    client.account_information.get_user_holdings.return_value = holdings_response
 
     # Mock delete response
     delete_response = MagicMock()
@@ -99,21 +101,9 @@ def test_register_user(snaptrade_client, mock_snaptrade_client, mock_db_manager)
     )
 
 
-def test_register_user_db_not_implemented(snaptrade_client, mock_db_manager):
-    """Test registration when DB storage raises NotImplementedError"""
-    mock_db_manager.store_snaptrade_user.side_effect = NotImplementedError()
-
-    response = snaptrade_client.post("/brokerages/register")
-    assert response.status_code == 200
-
-    data = response.json()
-    assert data["status"] == "registered"
-    assert "user_secret" in data  # Should return secret when DB not implemented
-
-
 def test_get_login_url(snaptrade_client, mock_snaptrade_client):
-    """Test login URL endpoint"""
-    response = snaptrade_client.get("/brokerages/login_url")
+    """Test login URL endpoint (POST with empty body)"""
+    response = snaptrade_client.post("/brokerages/login_url", json={})
     assert response.status_code == 200
 
     data = response.json()
@@ -121,29 +111,37 @@ def test_get_login_url(snaptrade_client, mock_snaptrade_client):
     assert "snaptrade.com" in data["redirect_url"]
 
 
-def test_get_login_url_with_redirect(snaptrade_client, mock_snaptrade_client):
-    """Test login URL endpoint with custom redirect"""
-    response = snaptrade_client.get(
-        "/brokerages/login_url?redirect_uri=https://myapp.com/callback"
+def test_get_login_url_with_custom_redirect(snaptrade_client, mock_snaptrade_client):
+    """Test login URL endpoint with custom redirect via request body"""
+    response = snaptrade_client.post(
+        "/brokerages/login_url",
+        json={"custom_redirect": "https://myapp.com/callback"},
     )
     assert response.status_code == 200
 
-    # Verify custom redirect was passed
-    call_args = mock_snaptrade_client.authentication.login_snap_trade_user.call_args
-    assert call_args[1]["query_params"]["customRedirect"] == "https://myapp.com/callback"
+    # Verify custom_redirect was passed through to the SDK call
+    call_kwargs = mock_snaptrade_client.authentication.login_snap_trade_user.call_args[1]
+    assert call_kwargs["custom_redirect"] == "https://myapp.com/callback"
 
 
-def test_get_login_url_user_not_registered(snaptrade_client, mock_db_manager):
-    """Test login URL when user is not registered"""
+def test_get_login_url_auto_registers(snaptrade_client, mock_snaptrade_client, mock_db_manager):
+    """Test login URL auto-registers user when not found in DB"""
     mock_db_manager.get_snaptrade_user_secret.return_value = None
 
-    response = snaptrade_client.get("/brokerages/login_url")
-    assert response.status_code == 404
-    assert "not registered" in response.json()["detail"]
+    response = snaptrade_client.post("/brokerages/login_url", json={})
+    assert response.status_code == 200
+
+    # Verify auto-registration happened
+    mock_snaptrade_client.authentication.register_snap_trade_user.assert_called_once_with(
+        body={"userId": "test-user-id"}
+    )
+    mock_db_manager.store_snaptrade_user.assert_called_once_with(
+        "test-user-id", "test-secret-123"
+    )
 
 
 def test_get_holdings(snaptrade_client, mock_snaptrade_client):
-    """Test holdings endpoint"""
+    """Test holdings endpoint fetches per-account holdings"""
     response = snaptrade_client.get("/brokerages/holdings")
     assert response.status_code == 200
 
@@ -151,6 +149,13 @@ def test_get_holdings(snaptrade_client, mock_snaptrade_client):
     assert "holdings" in data
     assert data["user_id"] == "test-user-id"
     assert len(data["holdings"]) > 0
+
+    # Verify it listed accounts then fetched holdings per account
+    mock_snaptrade_client.account_information.list_user_accounts.assert_called_once()
+    mock_snaptrade_client.account_information.get_user_holdings.assert_called_once_with(
+        account_id="acc-123",
+        query_params={"userId": "test-user-id", "userSecret": "test-secret-123"},
+    )
 
 
 def test_get_holdings_user_not_registered(snaptrade_client, mock_db_manager):
@@ -178,17 +183,6 @@ def test_delete_user(snaptrade_client, mock_snaptrade_client, mock_db_manager):
     mock_db_manager.delete_snaptrade_user.assert_called_once_with("test-user-id")
 
 
-def test_delete_user_db_not_implemented(snaptrade_client, mock_db_manager):
-    """Test deletion when DB delete raises NotImplementedError"""
-    mock_db_manager.delete_snaptrade_user.side_effect = NotImplementedError()
-
-    response = snaptrade_client.delete("/brokerages/user")
-    assert response.status_code == 200  # Should still succeed
-
-    data = response.json()
-    assert data["status"] == "deleted"
-
-
 def test_register_http_error(snaptrade_client, mock_snaptrade_client):
     """Test registration when SnapTrade API returns error"""
     mock_response = MagicMock()
@@ -204,13 +198,13 @@ def test_register_http_error(snaptrade_client, mock_snaptrade_client):
 
 
 def test_holdings_http_error(snaptrade_client, mock_snaptrade_client):
-    """Test holdings when SnapTrade API returns error"""
+    """Test holdings when SnapTrade API returns error on account listing"""
     mock_response = MagicMock()
     mock_response.status_code = 401
     error = httpx.HTTPStatusError(
         "Unauthorized", request=MagicMock(), response=mock_response
     )
-    mock_snaptrade_client.account_information.get_all_user_holdings.side_effect = error
+    mock_snaptrade_client.account_information.list_user_accounts.side_effect = error
 
     response = snaptrade_client.get("/brokerages/holdings")
     assert response.status_code == 401
