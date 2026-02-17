@@ -8,6 +8,7 @@ import SelectBank from './SelectBank'
 import AccountBalances from './AccountBalances'
 import AllBalances from './AllBalances'
 import SelectBrokerage from './SelectBrokerage'
+import BrokerageBalances from './BrokerageBalances'
 import Sidebar from './Sidebar'
 import SearchBar from './SearchBar'
 import { colors, borderRadius, typography } from '../theme'
@@ -37,7 +38,7 @@ interface StockSubscription {
 }
 
 type View = 'stocks' | 'portfolio'
-type PortfolioSubView = 'all' | 'connect' | 'balances' | 'brokerage'
+type PortfolioSubView = 'all' | 'connect' | 'balances' | 'brokerageBalances' | 'brokerage'
 
 export default function Dashboard() {
   const [searchSymbol, setSearchSymbol] = useState('')
@@ -742,6 +743,22 @@ export default function Dashboard() {
                     Bank Balances
                   </button>
                   <button
+                    onClick={() => setPortfolioSubView('brokerageBalances')}
+                    style={{
+                      padding: '12px 20px',
+                      backgroundColor: 'transparent',
+                      border: 'none',
+                      color: portfolioSubView === 'brokerageBalances' ? colors.accent.primary : colors.text.secondary,
+                      cursor: 'pointer',
+                      fontSize: typography.fontSize.sm,
+                      fontWeight: typography.fontWeight.medium,
+                      borderBottom: portfolioSubView === 'brokerageBalances' ? `2px solid ${colors.accent.primary}` : '2px solid transparent',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    Brokerage Balances
+                  </button>
+                  <button
                     onClick={() => setPortfolioSubView('brokerage')}
                     style={{
                       padding: '12px 20px',
@@ -797,6 +814,10 @@ export default function Dashboard() {
 
                 {portfolioSubView === 'balances' && (
                   <AccountBalances />
+                )}
+
+                {portfolioSubView === 'brokerageBalances' && (
+                  <BrokerageBalances />
                 )}
 
                 {portfolioSubView === 'brokerage' && (
