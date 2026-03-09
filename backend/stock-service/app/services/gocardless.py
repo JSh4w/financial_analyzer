@@ -198,6 +198,18 @@ class GoCardlessClient:
         response.raise_for_status()
         return response.json()
 
+    async def delete_requisition(self, requisition_id: str) -> dict:
+        """Delete a requisition from GoCardless, cancelling any pending or linked access."""
+        token = await self.get_token()
+        response = await self.client.delete(
+            f"/api/v2/requisitions/{requisition_id}/",
+            headers={
+                "Authorization": f"Bearer {token}",
+            },
+        )
+        response.raise_for_status()
+        return response.json() if response.content else {}
+
     async def get_balance_from_accounts(self, account_ids: List[str]) -> List[dict]:
         """Get balance information for given bank account IDs with rate limit handling"""
         token = await self.get_token()

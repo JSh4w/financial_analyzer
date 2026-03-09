@@ -133,6 +133,62 @@ async def get_requisition_status(
         ) from e
 
 
+@banking_router.delete("/requisition/{requisition_id}")
+async def delete_requisition(
+    requisition_id: str,
+    user_id: str = Depends(get_current_user_id),
+    client: GoCardlessClient = Depends(get_banking_client),
+    db: DatabaseManager = Depends(get_supabase_db),
+):
+    """Cancel and remove a bank requisition.
+
+    Works for any state — pending (incomplete), linked (fully tracked), or otherwise.
+    Deletes cached balance data only when it exists, then removes the requisition from
+    GoCardless and the local database to keep everything in sync.
+    """
+    # Verify the requisition belongs to this user
+    requisitions = db.get_user_requisitions(user_id)
+    if not any(req["requisition_id"] == requisition_id for req in requisitions):
+        raise HTTPException(status_code=404, detail="Requisition not found")
+
+    # Fetch current details to discover any linked account IDs
+    account_ids = []
+    try:
+        details = await client.get_requisition_details(requisition_id)
+        account_ids = details.get("accounts", [])
+    except httpx.HTTPStatusError as e:
+        # If GoCardless already has no record, skip — we still clean up locally
+        if e.response.status_code != 404:
+            raise HTTPException(
+                status_code=e.response.status_code,
+                detail=f"Failed to fetch requisition details: {e}",
+            ) from e
+
+    # Remove any cached balance data for linked accounts
+    if account_ids:
+        db.delete_account_balances(account_ids)
+
+    # Delete from GoCardless (cancels pending auth or revokes linked access)
+    try:
+        await client.delete_requisition(requisition_id)
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code != 404:  # Already gone on their side is fine
+            raise HTTPException(
+                status_code=e.response.status_code,
+                detail=f"Failed to delete requisition from GoCardless: {e}",
+            ) from e
+
+    # Remove from local database
+    db.delete_requisition(requisition_id)
+
+    return {
+        "status": "deleted",
+        "requisition_id": requisition_id,
+        "accounts_removed": len(account_ids),
+        "message": "Requisition cancelled and removed successfully",
+    }
+
+
 @banking_router.get("/all_balances")
 async def get_all_balances(
     user_id: str = Depends(get_current_user_id),

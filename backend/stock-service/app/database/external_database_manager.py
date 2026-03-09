@@ -349,6 +349,19 @@ class DatabaseManager:
             logger.error("Failed to store/update balance: %s", e)
             return None
 
+    def delete_account_balances(self, account_ids: list[str]) -> bool:
+        """Delete cached balance data for the given GoCardless account IDs."""
+        try:
+            for account_id in account_ids:
+                self.client.table("bank_account_balances").delete().eq(
+                    "account_id", account_id
+                ).execute()
+            logger.info("Deleted balance data for %d accounts", len(account_ids))
+            return True
+        except Exception as e:
+            logger.error("Failed to delete account balances: %s", e)
+            return False
+
     # SnapTrade user storage methods
     def store_snaptrade_user(self, user_id: str, user_secret: str) -> bool:
         """Store SnapTrade user_secret (encrypted) for a user."""
