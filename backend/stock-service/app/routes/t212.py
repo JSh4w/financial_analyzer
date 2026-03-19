@@ -1,4 +1,8 @@
-"""Routes for Trading212 API integration."""
+"""
+This module provides endpoints for users to manage their Trading212 API keys
+and to fetch account summaries and positions. It includes caching to respect
+Trading212's rate limits.
+"""
 
 from __future__ import annotations
 
