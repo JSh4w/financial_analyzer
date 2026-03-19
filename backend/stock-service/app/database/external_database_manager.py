@@ -414,3 +414,58 @@ class DatabaseManager:
         except Exception as e:
             logger.error("Failed to delete SnapTrade user: %s", e)
             return False
+
+    def add_custom_investment(
+        self,
+        user_id: str,
+        name: str,
+        amount: float,
+        description: str | None = None,
+    ) -> dict:
+        """Add a custom investment for a user, encrypting the amount."""
+        encrypted_amount = self.encrypt_string(str(amount))
+        data = {
+            "user_id": user_id,
+            "name": name,
+            "description": description,
+            "amount": encrypted_amount,
+        }
+        result = self.client.table("custom_investments").insert(data).execute()
+        logger.info("Stored custom investment '%s' for user %s", name, user_id)
+        return result.data[0] if result.data else {}
+
+    def get_custom_investments(self, user_id: str) -> list[dict]:
+        """Retrieve custom investments for a user, decrypting the amount field."""
+        result = (
+            self.client.table("custom_investments")
+            .select("*")
+            .eq("user_id", user_id)
+            .order("created_at", desc=True)
+            .execute()
+        )
+        investments = result.data or []
+        for inv in investments:
+            try:
+                inv["amount"] = float(self.decrypt_string(inv["amount"]))
+            except (ValueError, TypeError):
+                logger.warning("Bad amount for investment %s", inv.get("id"))
+                inv["amount"] = 0.0
+        return investments
+
+    def delete_custom_investment(self, investment_id: str, user_id: str) -> bool:
+        """Delete a custom investment by ID, ensuring it belongs to the user."""
+        result = (
+            self.client.table("custom_investments")
+            .select("id")
+            .eq("id", investment_id)
+            .eq("user_id", user_id)
+            .execute()
+        )
+        if not result.data:
+            return False
+
+        self.client.table("custom_investments").delete().eq(
+            "id", investment_id
+        ).execute()
+        logger.info("Deleted custom investment %s for user %s", investment_id, user_id)
+        return True
