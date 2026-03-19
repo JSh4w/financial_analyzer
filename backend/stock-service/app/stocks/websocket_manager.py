@@ -441,8 +441,7 @@ class WebSocketManager:
 
     async def _process_message(self, message: str):
         """Process incoming Alpaca WebSocket messages"""
-        # Import here to avoid circular import
-        from app.main import time_function
+        from app.utils import time_function
 
         @time_function("websocket_process_message")
         async def process_message_data():
