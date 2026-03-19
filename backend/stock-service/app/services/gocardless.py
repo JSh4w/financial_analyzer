@@ -1,4 +1,5 @@
-"""GoCardless API client for handling user authentication and data retrieval."""
+"""GoCardless API client for handling user authentication and data retrieval.
+No endpoints are defined here - this is a service class to be used by route handlers."""
 
 import uuid
 from datetime import datetime, timedelta
