@@ -347,7 +347,7 @@ export default function Dashboard() {
     // If permanent subscription, remove from database first
     if (stock?.isPermanent) {
       try {
-        await apiClient.delete(`/api/subscribe/${upperSymbol}`)
+        await apiClient.delete(`/subscriptions/subscribe/${upperSymbol}`)
       } catch (error) {
         console.error(`Error removing permanent subscription for ${upperSymbol}:`, error)
       }
@@ -397,7 +397,7 @@ export default function Dashboard() {
         symbol: string
         subscriber_count: number
         message: string
-      }>(`/api/subscribe/${upperSymbol}`)
+      }>(`/subscriptions/subscribe/${upperSymbol}`)
 
       if (result.status === 'subscribed') {
         setActiveStocks(prev => {
@@ -425,7 +425,7 @@ export default function Dashboard() {
         symbol: string
         remaining_subscribers: number
         message: string
-      }>(`/api/subscribe/${upperSymbol}`)
+      }>(`/subscriptions/subscribe/${upperSymbol}`)
 
       if (result.status === 'unsubscribed') {
         setActiveStocks(prev => {
@@ -463,7 +463,7 @@ export default function Dashboard() {
         const result = await apiClient.get<{
           symbols: string[]
           count: number
-        }>('/api/subscriptions')
+        }>('/subscriptions/user_subscriptions')
 
         if (result.symbols && result.symbols.length > 0) {
           setGlobalStatus(`Loading ${result.count} saved stocks...`)
