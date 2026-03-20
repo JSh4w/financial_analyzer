@@ -35,3 +35,8 @@ inspiration/
 
 # Optionally hidden files
 _hidden*
+
+.vscode/
+.claude/
+.github/
+.pytest_cache/
