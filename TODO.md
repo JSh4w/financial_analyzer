@@ -1,12 +1,3 @@
- 
-# Todo 
-
-## Security
-Store trading212 api 
-Use IBKR  
-add bak account information
-add extra t212 information
-
 
 ## Stock service
 
@@ -22,21 +13,18 @@ add extra t212 information
 11. News analysis entirely in modal -> request api then use finBert for processing 
 
 
+- Analysis using processor scaled by AWS setup 
+
+- Leetcode 
+
 ## Net Worth Calculator
-1. Gocardless API for banks
-    1. Storing correct information
-    2. Retrieve all stored information to view current account ammounts
-    3. Store user profiles on login!!!!
-2. API for T212
-    1. Read only API key from user
-    2. User prompt 
-3. API for interactive brokers
 4. Alpha vantage for long term information 
-5. Authentication for users to login / Encryption
 
 
 ### Extra tools to consider
-kafka data streaming
-Redis for caching of streams
-Artillery/ Jmeter for analysis
-Prometheus and grafana
+kafka data streaming - overkill for now 
+Redis for caching of streams - overkill for now 
+Artillery/ Jmeter for analysis maybe
+Prometheus and grafana - yes would help with backend debug 
+
+## Explanation on how snaptrade works 
