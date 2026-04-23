@@ -9,7 +9,6 @@
 	"service": "stock-service",
 
 	"workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
-
 	
 	"features": {
 		"ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
@@ -24,17 +23,18 @@
 			"username": "vscode",
 			"upgradePackages": false
 		},
-		// poetry feature not needed as used in Dockerfile
-		//"ghcr.io/devcontainers-extra/features/poetry:2": {}
 
 		// Add Node.js for frontend development
 		"ghcr.io/devcontainers/features/node:1": {
 			"nodeGypDependencies": true,
 			"version": "20"
+		},
+		"ghcr.io/devcontainers-extra/features/zsh-plugins:0": {
+			"plugins": "zsh-syntax-highlighting zsh-autosuggestions",
+			"omzPlugins": "https://github.com/zsh-users/zsh-syntax-highlighting https://github.com/zsh-users/zsh-autosuggestions"
 		}
 	},
 	
-	// Tell VS Code to use Zsh as the default terminal
 	"customizations": {
 	  "vscode": {
 		"settings": {
@@ -57,7 +57,6 @@
 	  }
 	},
 
-   "postCreateCommand": "sudo apt-get update && sudo apt-get install -y cmake gdb",
-   "postStartCommand": "npm install -g @anthropic-ai/claude-code; npm install -g @google/gemini-cli@latest"
-
+	"postCreateCommand": "sudo apt-get update && sudo apt-get install -y cmake gdb && (which terraform || (curl -fsSL https://releases.hashicorp.com/terraform/1.9.0/terraform_1.9.0_linux_amd64.zip -o /tmp/tf.zip && unzip /tmp/tf.zip -d /usr/local/bin/ && rm /tmp/tf.zip))",
+	"postStartCommand": "npm install -g @anthropic-ai/claude-code; npm install -g @google/gemini-cli@latest"
 }
