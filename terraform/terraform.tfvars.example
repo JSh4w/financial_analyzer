@@ -1,0 +1,19 @@
+# Copy this to terraform.tfvars and fill in your values
+# terraform.tfvars is gitignored — never commit it
+
+resource_group_name = "financial-analyzer-rg"
+location            = "eastus"
+acr_name            = "financialanalyzerXXX"  # must be globally unique, lowercase only
+
+# Secrets — paste values from your .env file
+alpaca_api_key        = ""
+alpaca_api_secret     = ""
+supabase_url          = ""
+supabase_key          = ""
+supabase_anon_key     = ""
+gocardless_secret_id  = ""
+gocardless_secret_key = ""
+
+# Scaling — min_replicas = 0 means it scales to zero when not in use (saves money)
+min_replicas = 0
+max_replicas = 1
