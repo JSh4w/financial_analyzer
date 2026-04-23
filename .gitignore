@@ -15,6 +15,14 @@ build/
 
 # Azure deployment configuration
 azure-config.txt
+azure-deployed-config.txt
+
+# Terraform
+terraform/.terraform/
+terraform/.terraform.lock.hcl
+terraform/terraform.tfvars
+terraform/terraform.tfstate
+terraform/terraform.tfstate.backup
 
 # Python cache files
 *.pyc
