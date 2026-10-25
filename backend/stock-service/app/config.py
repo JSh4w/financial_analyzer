@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     ALPACA_TEST_URL: str = "wss://stream.data.alpaca.markets/v2/test"
     ALPACA_API_KEY: str = "demo_key"
     ALPACA_API_SECRET: str = "demo_secret"
+    # Which Alpaca market-data stream to connect to. Alpaca data plans allow a
+    # single concurrent stream connection per account, so we open exactly one.
+    # Use "iex" for live data (prod) or "test" for the FAKEPACA sandbox (local).
+    ALPACA_STREAM_FEED: str = "iex"
     SUPABASE_URL: str = "url"
     SUPABASE_KEY: str = "key"
     SUPABASE_JWT_SECRET: str = "secret"  # Legacy HS256 secret (deprecated)

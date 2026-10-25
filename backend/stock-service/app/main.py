@@ -109,19 +109,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[Dict]:
     # Start processing task
     aggregator_task = asyncio.create_task(data_aggregator.process_tick_queue())
 
-    # Initialize WebSocket manager with the shared queue
-    # "wss://stream.data.alpaca.markets/v2/test for FAKEPACA
-    # "wss://stream.data.alpaca.markets/v2/iex"
+    # Initialize WebSocket manager with the shared queue.
+    # Alpaca data plans permit a single concurrent stream connection per
+    # account, so we open exactly one socket to the configured feed
+    # (ALPACA_STREAM_FEED: "iex" for live data, "test" for the FAKEPACA sandbox).
+    # Opening a second connection trips "connection limit exceeded" (406).
     ws_manager = await connect_and_start_websocket(
         websocket=WebSocketManager,
-        uri="wss://stream.data.alpaca.markets/v2/iex",
+        uri=f"wss://stream.data.alpaca.markets/v2/{settings.ALPACA_STREAM_FEED}",
         output_queue=shared_queue,
     )
-    demo_ws_manager = await connect_and_start_websocket(
-        websocket=WebSocketManager,
-        uri="wss://stream.data.alpaca.markets/v2/test",
-        output_queue=shared_queue,
-    )
+    # The demo manager aliases the primary one so FAKEPACA routing across the
+    # routes still resolves without opening a second Alpaca connection.
+    demo_ws_manager = ws_manager
 
     # Initialize SubscriptionManager (source of truth for subscriptions)
     subscription_manager = SubscriptionManager(
@@ -130,11 +130,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[Dict]:
         on_handler_create_callback=data_aggregator.ensure_handler_exists,
     )
 
-    demo_subscription_manager = SubscriptionManager(
-        subscribe_callback=demo_ws_manager.subscribe,
-        unsubscribe_callback=demo_ws_manager.unsubscribe,
-        on_handler_create_callback=data_aggregator.ensure_handler_exists,
-    )
+    demo_subscription_manager = subscription_manager
 
     logger.info("SubscriptionManager initialized and wired")
 
@@ -234,7 +230,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[Dict]:
 
     await data_aggregator.shutdown()
     await ws_manager.stop()
-    await demo_ws_manager.stop()
+    # demo_ws_manager aliases ws_manager (single Alpaca connection), so it is
+    # already stopped above.
     await news_ws.stop()
 
     # Stop news broadcast task
