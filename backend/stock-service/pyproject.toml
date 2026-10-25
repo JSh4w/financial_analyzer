@@ -41,6 +41,20 @@ sphinx-rtd-theme = "^3.0.2"
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
+[tool.pytest.ini_options]
+# Add the service root to sys.path so `tests/conftest.py` can `import app.*`
+# regardless of how pytest is invoked. "." is resolved relative to rootdir
+# (this file's directory).
+pythonpath = ["."]
+testpaths = ["tests"]
+# Wall-clock performance benchmarks are environment-dependent and flaky in
+# CI/containers, so they're excluded from the default run. Run them explicitly
+# with:  pytest -m performance
+addopts = "-m 'not performance'"
+markers = [
+    "performance: wall-clock benchmark, excluded from the default test run",
+]
+
 [tool.pylint.MASTER]
 init-hook = 'import sys; from pathlib import Path; sys.path.append(str(Path(__file__).parent.resolve()))'
 

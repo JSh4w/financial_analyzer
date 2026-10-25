@@ -25,5 +25,6 @@ COPY . .
 # Create logs directory
 RUN mkdir -p logs
 
-# Run tests by default
-CMD ["poetry", "run", "pytest", "tests/", "-v"]
+# Run tests by default. Use `python -m pytest` (not the bare `pytest` console
+# script) so the working dir is added to sys.path and conftest can import `app`.
+CMD ["poetry", "run", "python", "-m", "pytest", "tests/", "-v"]

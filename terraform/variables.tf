@@ -37,12 +37,6 @@ variable "supabase_key" {
   sensitive   = true
 }
 
-variable "supabase_anon_key" {
-  description = "Supabase anon key"
-  type        = string
-  sensitive   = true
-}
-
 variable "gocardless_secret_id" {
   description = "GoCardless secret ID"
   type        = string
@@ -51,6 +45,12 @@ variable "gocardless_secret_id" {
 
 variable "gocardless_secret_key" {
   description = "GoCardless secret key"
+  type        = string
+  sensitive   = true
+}
+
+variable "bank_encryption_key" {
+  description = "Fernet key used to encrypt bank data at rest"
   type        = string
   sensitive   = true
 }

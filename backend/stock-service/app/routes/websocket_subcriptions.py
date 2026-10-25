@@ -9,6 +9,7 @@ from app.dependencies import (
     get_ws_manager,
 )
 from app.stocks.subscription_manager import SubscriptionManager
+from app.stocks.websocket_manager import WebSocketManager
 from fastapi import APIRouter, Depends
 
 logger = getLogger(__name__)
