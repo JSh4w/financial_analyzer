@@ -55,6 +55,18 @@ variable "bank_encryption_key" {
   sensitive   = true
 }
 
+variable "snaptrade_client_id" {
+  description = "SnapTrade client ID"
+  type        = string
+  sensitive   = true
+}
+
+variable "snaptrade_consumer_key" {
+  description = "SnapTrade consumer key"
+  type        = string
+  sensitive   = true
+}
+
 variable "min_replicas" {
   description = "Minimum container replicas (set to 0 to scale to zero when idle)"
   type        = number
