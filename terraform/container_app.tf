@@ -48,16 +48,16 @@ resource "azurerm_container_app" "stock_service" {
     value = var.supabase_key
   }
   secret {
-    name  = "supabase-anon-key"
-    value = var.supabase_anon_key
-  }
-  secret {
     name  = "gocardless-secret-id"
     value = var.gocardless_secret_id
   }
   secret {
     name  = "gocardless-secret-key"
     value = var.gocardless_secret_key
+  }
+  secret {
+    name  = "bank-encryption-key"
+    value = var.bank_encryption_key
   }
 
   template {
@@ -66,7 +66,7 @@ resource "azurerm_container_app" "stock_service" {
 
     container {
       name   = "stock-service"
-      image  = "${azurerm_container_registry.main.login_server}/stock-service:latest"
+      image  = "${azurerm_container_registry.main.login_server}/${local.image_name}"
       cpu    = 1.0
       memory = "2Gi"
 
@@ -87,16 +87,16 @@ resource "azurerm_container_app" "stock_service" {
         secret_name = "supabase-key"
       }
       env {
-        name        = "SUPABASE_ANON_KEY"
-        secret_name = "supabase-anon-key"
-      }
-      env {
         name        = "GO_CARDLESS_SECRET_ID"
         secret_name = "gocardless-secret-id"
       }
       env {
         name        = "GO_CARDLESS_SECRET_KEY"
         secret_name = "gocardless-secret-key"
+      }
+      env {
+        name        = "BANK_ENCRYPTION_KEY"
+        secret_name = "bank-encryption-key"
       }
     }
   }

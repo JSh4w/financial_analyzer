@@ -1,0 +1,33 @@
+# Ignore file for the TEST image (Dockerfile.test). BuildKit uses this instead
+# of .dockerignore when building with `-f Dockerfile.test`.
+#
+# Unlike the production .dockerignore, this KEEPS tests/ and test_*.py so the
+# test image can actually run them.
+
+# Never include secrets
+.env
+.env.*
+*.env
+
+# Git / caches (**/ so nested dirs like tests/__pycache__ are excluded too —
+# stale host bytecode embeds host paths and breaks tracebacks)
+.git
+.gitignore
+**/__pycache__
+**/*.py[cod]
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.venv
+venv
+
+# IDE
+.vscode
+.idea
+
+# Logs
+logs/
+*.log
+
+# Build artifacts
+app/cpp/hmm/build

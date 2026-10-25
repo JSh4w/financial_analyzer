@@ -36,7 +36,7 @@ services:
       - ./frontend:/app
       - /app/node_modules
     environment:
-      - VITE_API_URL=stock-service.blacksky-b03b012f.westeurope.azurecontainerapps.io
+      - VITE_API_URL=http://localhost:8001
     depends_on:
       - stock-service
 

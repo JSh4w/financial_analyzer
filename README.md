@@ -73,7 +73,7 @@ A net worth tracking and stock analysis platform with real-time market data, bro
 | Streaming | WebSockets (upstream), SSE (downstream to browser) |
 | ML | Modal (serverless GPU), FinBERT, HMM (C++/PyBind11) |
 | Monitoring | Sentry |
-| Deployment | Docker, Azure Container Apps |
+| Deployment | Docker · Terraform · Azure Container Apps (backend) · Vercel (frontend) |
 
 ---
 
@@ -200,6 +200,17 @@ poetry run pytest
 ```
 
 116 tests covering the data aggregator, DuckDB manager, subscription lifecycle, WebSocket handling, and API routes.
+
+### Deploying
+
+Backend runs on Azure Container Apps, defined in `terraform/`. Frontend is on Vercel (auto-deploys on push).
+
+```bash
+cd terraform
+./apply.sh          # runs tests, then terraform plan + apply
+```
+
+`apply.sh` reads secrets from `backend/stock-service/.env`; non-secret config lives in `terraform.tfvars`. Flags: `--skip-tests`, `-y` (no prompts), `--plan-only`.
 
 ---
 

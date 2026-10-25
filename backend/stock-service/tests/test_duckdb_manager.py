@@ -416,6 +416,7 @@ class TestStockDataManager:
         total_count = db_manager.get_candle_count()
         assert total_count == 5
 
+    @pytest.mark.performance
     def test_large_dataset_performance(self, db_manager, base_timestamp):
         """Test performance with larger dataset"""
         symbol = "PERF_TEST"
