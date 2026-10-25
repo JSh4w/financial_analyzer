@@ -35,6 +35,8 @@ export TF_VAR_supabase_key="${SUPABASE_KEY:-}"
 export TF_VAR_gocardless_secret_id="${GO_CARDLESS_SECRET_ID:-}"
 export TF_VAR_gocardless_secret_key="${GO_CARDLESS_SECRET_KEY:-}"
 export TF_VAR_bank_encryption_key="${BANK_ENCRYPTION_KEY:-}"
+export TF_VAR_snaptrade_client_id="${SNAPTRADE_CLIENT_ID:-}"
+export TF_VAR_snaptrade_consumer_key="${SNAPTRADE_CONSUMER_KEY:-}"
 
 # Warn about anything Terraform requires but the .env didn't provide.
 missing=()
@@ -45,6 +47,8 @@ missing=()
 [ -z "${GO_CARDLESS_SECRET_ID:-}" ] && missing+=("GO_CARDLESS_SECRET_ID")
 [ -z "${GO_CARDLESS_SECRET_KEY:-}" ]&& missing+=("GO_CARDLESS_SECRET_KEY")
 [ -z "${BANK_ENCRYPTION_KEY:-}" ]   && missing+=("BANK_ENCRYPTION_KEY")
+[ -z "${SNAPTRADE_CLIENT_ID:-}" ]   && missing+=("SNAPTRADE_CLIENT_ID")
+[ -z "${SNAPTRADE_CONSUMER_KEY:-}" ]&& missing+=("SNAPTRADE_CONSUMER_KEY")
 
 if [ ${#missing[@]} -gt 0 ]; then
   echo "load-secrets: WARNING — these expected keys are empty/missing in $ENV_FILE:" >&2

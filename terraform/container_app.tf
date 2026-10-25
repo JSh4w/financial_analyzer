@@ -59,6 +59,14 @@ resource "azurerm_container_app" "stock_service" {
     name  = "bank-encryption-key"
     value = var.bank_encryption_key
   }
+  secret {
+    name  = "snaptrade-client-id"
+    value = var.snaptrade_client_id
+  }
+  secret {
+    name  = "snaptrade-consumer-key"
+    value = var.snaptrade_consumer_key
+  }
 
   template {
     min_replicas = var.min_replicas
@@ -86,6 +94,13 @@ resource "azurerm_container_app" "stock_service" {
         name        = "SUPABASE_KEY"
         secret_name = "supabase-key"
       }
+      # Public JWKS endpoint for RS256 token verification, derived from the
+      # Supabase project URL. Lets auth.py use the secure RS256 path instead of
+      # the legacy HS256 fallback.
+      env {
+        name  = "SUPABASE_JWKS_URL"
+        value = "${trimsuffix(var.supabase_url, "/")}/auth/v1/.well-known/jwks.json"
+      }
       env {
         name        = "GO_CARDLESS_SECRET_ID"
         secret_name = "gocardless-secret-id"
@@ -97,6 +112,14 @@ resource "azurerm_container_app" "stock_service" {
       env {
         name        = "BANK_ENCRYPTION_KEY"
         secret_name = "bank-encryption-key"
+      }
+      env {
+        name        = "SNAPTRADE_CLIENT_ID"
+        secret_name = "snaptrade-client-id"
+      }
+      env {
+        name        = "SNAPTRADE_CONSUMER_KEY"
+        secret_name = "snaptrade-consumer-key"
       }
     }
   }
