@@ -41,6 +41,30 @@ export class BankClientDatafeed {
   }
 
   /**
+   * Cancels a requisition (e.g. the user backs out of the bank auth instead of
+   * completing it) and removes it from GoCardless and the backend database.
+   */
+  async deleteRequisition(requisitionId: string, token: string) {
+    const response = await fetch(
+      `${BACKEND_URL}/banking/requisition/${encodeURIComponent(requisitionId)}`,
+      {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Failed to cancel requisition: ${error}`);
+    }
+
+    return response.json();
+  }
+
+  /**
    * Fetches all account balances for the authenticated user
    */
   async getAllBalances(token: string) {
