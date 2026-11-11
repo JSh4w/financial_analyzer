@@ -2,16 +2,17 @@
 
 Snaptrade has its own SDK for python integration"""
 
+import json
 from logging import getLogger
 from typing import Literal, Optional
 
-import httpx
 from app.auth import get_current_user_id
 from app.database.external_database_manager import DatabaseManager
 from app.dependencies import get_brokerage_client, get_supabase_db
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from pydantic import BaseModel
 from snaptrade_client import SnapTrade
+from snaptrade_client.exceptions import ApiException
 
 logger = getLogger(__name__)
 
@@ -29,37 +30,33 @@ class LoginUrlRequest(BaseModel):
     connection_portal_version: Optional[str] = None
 
 
-def handle_snaptrade_error(e: httpx.HTTPStatusError, operation: str) -> HTTPException:
-    """Parse SnapTrade API error responses and raise appropriate HTTPException.
+def handle_snaptrade_error(e: ApiException, operation: str) -> HTTPException:
+    """Turn a SnapTrade SDK ApiException into an HTTPException.
 
-    Handles error formats:
+    The SDK raises ApiException (not httpx errors). Its body is usually a
+    parsed dict in one of these shapes:
     - 400/404: {"default_detail": str, "default_code": int}
-    - 500: {"detail": str, "status_code": int, "code": int}
+    - 500:     {"detail": str, "status_code": int, "code": int}
+    Only the parsed message is surfaced; str(e) includes raw response headers.
     """
-    status_code = e.response.status_code if e.response else 502
+    status_code = e.status if isinstance(e.status, int) else 502
+    logger.error("%s: SnapTrade returned %s %s", operation, e.status, e.body)
 
-    try:
-        error_body = e.response.json() if e.response else {}
+    body = e.body
+    if isinstance(body, (bytes, str)):
+        try:
+            body = json.loads(body)
+        except ValueError:
+            body = {}
+    if not isinstance(body, dict):
+        body = {}
 
-        # Handle 400/404 error format
-        if "default_detail" in error_body:
-            detail = error_body.get("default_detail", str(e))
-            code = error_body.get("default_code")
-            error_msg = f"{operation}: {detail} (SnapTrade code: {code})" if code else f"{operation}: {detail}"
+    detail = body.get("default_detail") or body.get("detail") or e.reason
+    code = body.get("default_code") or body.get("code")
 
-        # Handle 500 error format
-        elif "detail" in error_body and "code" in error_body:
-            detail = error_body.get("detail", str(e))
-            code = error_body.get("code")
-            error_msg = f"{operation}: {detail} (SnapTrade code: {code})" if code else f"{operation}: {detail}"
-
-        # Fallback to string representation
-        else:
-            error_msg = f"{operation}: {str(e)}"
-
-    except Exception:
-        # If parsing fails, fall back to string representation
-        error_msg = f"{operation}: {str(e)}"
+    error_msg = f"{operation}: {detail}" if detail else operation
+    if code:
+        error_msg += f" (SnapTrade code: {code})"
 
     return HTTPException(status_code=status_code, detail=error_msg)
 
@@ -86,7 +83,7 @@ def list_brokerages(
             if b.get("enabled") and not b.get("maintenance_mode")
         ]
         return {"brokerages": brokerages}
-    except httpx.HTTPStatusError as e:
+    except ApiException as e:
         raise handle_snaptrade_error(e, "Failed to list brokerages") from e
 
 
@@ -111,7 +108,7 @@ def register_user(
             "user_id": user_id,
             "message": "User registered with SnapTrade successfully",
         }
-    except httpx.HTTPStatusError as e:
+    except ApiException as e:
         raise handle_snaptrade_error(e, "Failed to register user") from e
 
 
@@ -151,7 +148,7 @@ def get_login_url(
             "message": "Redirect user to this URL to connect their brokerage",
             "expires_in_minutes": 5,
         }
-    except httpx.HTTPStatusError as e:
+    except ApiException as e:
         raise handle_snaptrade_error(e, "Failed to get login URL") from e
 
 
@@ -210,7 +207,7 @@ def get_holdings(
             "holdings": all_holdings,
             "user_id": user_id,
         }
-    except httpx.HTTPStatusError as e:
+    except ApiException as e:
         raise handle_snaptrade_error(e, "Failed to get holdings") from e
 
 
@@ -236,5 +233,5 @@ def delete_user(
             "snaptrade_response": delete_response.body,
             "message": "User deleted from SnapTrade successfully",
         }
-    except httpx.HTTPStatusError as e:
+    except ApiException as e:
         raise handle_snaptrade_error(e, "Failed to delete user") from e
