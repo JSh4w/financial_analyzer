@@ -9,6 +9,12 @@ interface CandleData {
   volume: number
 }
 
+// Shapes of the ECharts callback params this chart actually reads
+interface AxisTooltipParam {
+  axisValue?: string
+  data?: unknown
+}
+
 interface StockChartProps {
   symbol: string
   candles: { [timestamp: string]: CandleData }
@@ -60,7 +66,9 @@ const StockChart: React.FC<StockChartProps> = ({ symbol, candles }) => {
     const volumeData = sortedEntries.map(([, candle]) => candle.volume)
 
     // Get current dataZoom state to preserve user's zoom/pan position
-    const currentOption = chartInstance.current.getOption() as any
+    const currentOption = chartInstance.current.getOption() as {
+      dataZoom?: { start?: number; end?: number }[]
+    }
     const currentDataZoom = currentOption?.dataZoom?.[0]
     const preservedStart = currentDataZoom?.start
     const preservedEnd = currentDataZoom?.end
@@ -81,14 +89,14 @@ const StockChart: React.FC<StockChartProps> = ({ symbol, candles }) => {
         },
         backgroundColor: 'rgba(0, 0, 0, 0.8)',
         borderColor: '#777',
-        formatter: function (params: any) {
+        formatter: function (params: AxisTooltipParam[]) {
           if (!params || params.length === 0) return '';
 
           const data = params[0]
           if (!data || !data.data) return '';
 
           const volumeData = params[1]
-          const candleData = data.data
+          const candleData = data.data as number[]
 
           return `
             <div style="padding: 10px;">
@@ -108,7 +116,7 @@ const StockChart: React.FC<StockChartProps> = ({ symbol, candles }) => {
                 <span style="color: ${candleData[1] >= candleData[0] ? '#4CAF50' : '#f44336'};">Close:</span> $${candleData[1]?.toFixed(2) || 'N/A'}
               </div>
               <div style="margin-bottom: 4px;">
-                <span style="color: #ff9800;">Volume:</span> ${volumeData?.data?.toLocaleString() || 'N/A'}
+                <span style="color: #ff9800;">Volume:</span> ${(volumeData?.data as number | undefined)?.toLocaleString() || 'N/A'}
               </div>
             </div>
           `
@@ -228,7 +236,7 @@ const StockChart: React.FC<StockChartProps> = ({ symbol, candles }) => {
           barMaxWidth: 50,
           barCategoryGap: '2px',  // Match candlestick gap
           itemStyle: {
-            color: function(params: any) {
+            color: function(params: { dataIndex: number }) {
               const index = params.dataIndex
               if (index === 0) return '#ff9800'
 
@@ -246,7 +254,7 @@ const StockChart: React.FC<StockChartProps> = ({ symbol, candles }) => {
     }
 
     // Use notMerge: false to allow smooth updates
-    chartInstance.current.setOption(option as any, { notMerge: false, lazyUpdate: false })
+    chartInstance.current.setOption(option as echarts.EChartOption, { notMerge: false, lazyUpdate: false })
 
     // Handle window resize
     const handleResize = () => {

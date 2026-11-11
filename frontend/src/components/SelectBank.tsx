@@ -3,6 +3,9 @@ import { BankClientDatafeed } from '../services/bankclient-datafeed'
 import { getAuthToken } from '../lib/auth'
 import { colors, borderRadius } from '../theme'
 
+const errorMessage = (err: unknown): string =>
+  err instanceof Error ? err.message : String(err)
+
 interface Institution {
   id: string
   name: string
@@ -33,8 +36,8 @@ export default function SelectBank() {
         const df = new BankClientDatafeed()
         const list = await df.getInstitutions()
         setInstitutions(list || [])
-      } catch (err: any) {
-        setError(String(err))
+      } catch (err: unknown) {
+        setError(errorMessage(err))
       } finally {
         setLoading(false)
       }
@@ -66,8 +69,8 @@ export default function SelectBank() {
       // Hold the requisition so the user can continue to the bank or cancel it.
       setPending({ link: result.link, requisitionId: result.requisition_id, name: inst.name })
       setConnecting(false)
-    } catch (err: any) {
-      setError(String(err.message || err))
+    } catch (err: unknown) {
+      setError(errorMessage(err))
       setConnecting(false)
     }
   }
@@ -86,8 +89,8 @@ export default function SelectBank() {
       const df = new BankClientDatafeed()
       await df.deleteRequisition(pending.requisitionId, token)
       setPending(null)
-    } catch (err: any) {
-      setError(String(err.message || err))
+    } catch (err: unknown) {
+      setError(errorMessage(err))
     } finally {
       setCancelling(false)
     }
