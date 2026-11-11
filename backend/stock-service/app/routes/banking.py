@@ -200,8 +200,33 @@ async def get_all_balances(
         for req in requisitions:
             requisition_id = req["requisition_id"]
 
-            # Get full requisition details to check status
-            requisition_details = await client.get_requisition_details(requisition_id)
+            # Get full requisition details to check status. One failing bank
+            # link must not take down every other bank's balances.
+            try:
+                requisition_details = await client.get_requisition_details(
+                    requisition_id
+                )
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 404:
+                    logger.info(
+                        "Requisition %s no longer exists at GoCardless; removing",
+                        requisition_id,
+                    )
+                    db.delete_requisition(requisition_id)
+                    continue
+                logger.error(
+                    "Failed to fetch requisition %s: %s", requisition_id, e
+                )
+                pending_requisitions.append(
+                    {
+                        "requisition_id": requisition_id,
+                        "institution_id": req.get("institution_id"),
+                        "institution_name": req.get("institution_id") or "Unknown",
+                        "status": "ERROR",
+                        "message": "Couldn't reach this bank connection. Try again later.",
+                    }
+                )
+                continue
             status = requisition_details.get("status")
             institution_id = requisition_details.get("institution_id")
 
@@ -290,9 +315,23 @@ async def get_all_balances(
                 logger.info(
                     f"Fetching fresh balances for {len(needs_refresh)} accounts"
                 )
-                fresh_balance_information = await client.get_balance_from_accounts(
-                    needs_refresh
-                )
+                fresh_balance_information = []
+                for account in needs_refresh:
+                    try:
+                        fresh_balance_information.extend(
+                            await client.get_balance_from_accounts([account])
+                        )
+                    except httpx.HTTPStatusError as e:
+                        # Fall back to whatever we have cached rather than
+                        # failing the whole request (e.g. on a 429).
+                        logger.error(
+                            "Balance fetch failed for account %s: %s", account, e
+                        )
+                        cached = db.get_balance_details_for_account(account)
+                        if cached:
+                            account_to_balances[account].extend(
+                                cached.get("balances", [])
+                            )
 
                 for balance_info in fresh_balance_information:
                     account_id = balance_info.get("account_id")
