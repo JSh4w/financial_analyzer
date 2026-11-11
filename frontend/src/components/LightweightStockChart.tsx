@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { createChart, CandlestickSeries, HistogramSeries, type IChartApi, type CandlestickData, type Time } from 'lightweight-charts';
+import { createChart, CandlestickSeries, HistogramSeries, type IChartApi, type ISeriesApi, type CandlestickData, type Time } from 'lightweight-charts';
 import { colors, borderRadius, typography } from '../theme';
 
 interface CandleData {
@@ -22,8 +22,8 @@ interface LightweightStockChartProps {
 const LightweightStockChart: React.FC<LightweightStockChartProps> = ({ symbol, candles }) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
-  const candlestickSeriesRef = useRef<any>(null);
-  const volumeSeriesRef = useRef<any>(null);
+  const candlestickSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
+  const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
 
   // Initialize chart
   useEffect(() => {
