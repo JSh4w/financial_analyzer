@@ -137,8 +137,14 @@ class GoCardlessClient:
             )
             return institution_id
 
+    # Bank-link consent window. 90 days is the PSD2 maximum supported by
+    # essentially every UK institution; if a bank rejects it the requisition is
+    # created without an explicit agreement and GoCardless's defaults apply.
+    ACCESS_VALID_FOR_DAYS = 90
+    MAX_HISTORICAL_DAYS = 90
+
     async def create_end_user_agreement(self, institution_id: str) -> dict:
-        """Creates an end user agreement for the given user ID."""
+        """Create a fresh end user agreement for a single requisition."""
         token = await self.get_token()
         try:
             response = await self.client.post(
@@ -149,10 +155,10 @@ class GoCardlessClient:
                 },
                 json={
                     "institution_id": institution_id,
-                    "max_historical_days": "7",
-                    "access_valid_for_days": "7",
+                    "max_historical_days": self.MAX_HISTORICAL_DAYS,
+                    "access_valid_for_days": self.ACCESS_VALID_FOR_DAYS,
                     "access_scope": ["balances", "details", "transactions"],
-                    "reconfirmation": "false",
+                    "reconfirmation": False,
                 },
             )
             response.raise_for_status()

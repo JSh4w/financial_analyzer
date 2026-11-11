@@ -101,3 +101,15 @@ async def test_rejected_refresh_falls_back_to_new_token(client, fake):
 
     assert await client.get_token() == "access-2"
     assert fake.paths()[-2:] == ["/api/v2/token/refresh/", "/api/v2/token/new/"]
+
+
+@pytest.mark.asyncio
+async def test_end_user_agreement_requests_90_days(client, fake):
+    agreement = await client.create_end_user_agreement("BANK_GB")
+
+    assert agreement["id"] == "agreement-1"
+    _, path, body = fake.calls[-1]
+    assert path == "/api/v2/agreements/enduser/"
+    assert body["access_valid_for_days"] == 90
+    assert body["max_historical_days"] == 90
+    assert body["reconfirmation"] is False

@@ -52,13 +52,17 @@ async def requisition(
 ):
     """Create a GoCardless requisition and return the authentication link."""
     try:
-        # Create requisition with GoCardless
-        agreement_id = db.get_end_agreement(institution_id)
-        if agreement_id is None:
-            end_user_agreement = await client.create_end_user_agreement(institution_id)
-            agreement_id = end_user_agreement.get("id", None)
-            if agreement_id:
-                db.store_end_agreement(institution_id, agreement_id)
+        # Each requisition gets its own agreement. Agreements were previously
+        # cached per institution and shared across users, which reused stale
+        # terms (e.g. the old 7-day window) and agreements already consumed by
+        # another user's requisition.
+        end_user_agreement = await client.create_end_user_agreement(institution_id)
+        agreement_id = end_user_agreement.get("id")
+        if not agreement_id:
+            logger.warning(
+                "No end user agreement for %s; using GoCardless defaults",
+                institution_id,
+            )
         result = await client.create_requisition(
             redirect_uri, institution_id, agreement_id, user_id
         )
