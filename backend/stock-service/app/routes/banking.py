@@ -18,20 +18,6 @@ logger = getLogger(__name__)
 banking_router = APIRouter(prefix="/banking")
 
 
-@banking_router.post("/link")
-async def link_bank(client: GoCardlessClient = Depends(get_banking_client)):
-    """Generate a bank linking URL for the user."""
-    url = await client.create_requisition(...)
-    return {"url": url}
-
-
-@banking_router.get("/get_token")
-async def get_token(client: GoCardlessClient = Depends(get_banking_client)):
-    """Get current GoCardless access token"""
-    token = await client.get_token()
-    return {"token": token}
-
-
 @banking_router.get("/me")
 async def get_current_user_info(
     user_id: str = Depends(get_current_user_id),
