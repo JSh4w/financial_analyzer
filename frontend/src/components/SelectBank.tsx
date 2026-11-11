@@ -20,6 +20,10 @@ export default function SelectBank() {
   const [error, setError] = useState<string | null>(null)
   const [connecting, setConnecting] = useState(false)
   const [hoveredId, setHoveredId] = useState<string | null>(null)
+  // A requisition that's been created but not yet authenticated. We hold it so
+  // the user can either continue to the bank or cancel instead of completing.
+  const [pending, setPending] = useState<{ link: string; requisitionId: string; name: string } | null>(null)
+  const [cancelling, setCancelling] = useState(false)
 
   useEffect(() => {
     const load = async () => {
@@ -59,11 +63,33 @@ export default function SelectBank() {
       const redirectUri = `${window.location.origin}/portfolio`
       const result = await df.createRequisition(inst.id, redirectUri, token)
 
-      // Redirect to GoCardless auth page
-      window.location.href = result.link
+      // Hold the requisition so the user can continue to the bank or cancel it.
+      setPending({ link: result.link, requisitionId: result.requisition_id, name: inst.name })
+      setConnecting(false)
     } catch (err: any) {
       setError(String(err.message || err))
       setConnecting(false)
+    }
+  }
+
+  const handleContinue = () => {
+    if (pending) window.location.href = pending.link
+  }
+
+  const handleCancel = async () => {
+    if (!pending) return
+    setCancelling(true)
+    setError(null)
+    try {
+      const token = await getAuthToken()
+      if (!token) throw new Error('Please sign in to cancel')
+      const df = new BankClientDatafeed()
+      await df.deleteRequisition(pending.requisitionId, token)
+      setPending(null)
+    } catch (err: any) {
+      setError(String(err.message || err))
+    } finally {
+      setCancelling(false)
     }
   }
 
@@ -113,6 +139,51 @@ export default function SelectBank() {
           Connecting to bank...
         </div>
       )}
+      {pending && (
+        <div style={{
+          padding: '16px',
+          backgroundColor: colors.bg.tertiary,
+          borderRadius: borderRadius.lg,
+          marginBottom: '16px',
+          border: `1px solid ${colors.border.default}`
+        }}>
+          <div style={{ color: colors.text.primary, fontSize: '14px', marginBottom: '12px' }}>
+            You're about to authenticate with <strong>{pending.name}</strong>. Continue to your
+            bank to finish, or cancel if you don't want to connect.
+          </div>
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <button
+              onClick={handleContinue}
+              disabled={cancelling}
+              style={{
+                padding: '10px 16px',
+                borderRadius: borderRadius.md,
+                border: 'none',
+                backgroundColor: colors.accent.primary,
+                color: '#ffffff',
+                cursor: 'pointer',
+                fontWeight: 600,
+              }}
+            >
+              Continue to {pending.name}
+            </button>
+            <button
+              onClick={handleCancel}
+              disabled={cancelling}
+              style={{
+                padding: '10px 16px',
+                borderRadius: borderRadius.md,
+                border: `1px solid ${colors.border.default}`,
+                backgroundColor: 'transparent',
+                color: colors.text.primary,
+                cursor: cancelling ? 'default' : 'pointer',
+              }}
+            >
+              {cancelling ? 'Cancelling...' : 'Cancel'}
+            </button>
+          </div>
+        </div>
+      )}
       {error && (
         <div style={{
           color: colors.status.error,
@@ -126,7 +197,7 @@ export default function SelectBank() {
         </div>
       )}
 
-      {!loading && !error && (
+      {!loading && !error && !pending && (
         <div style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
