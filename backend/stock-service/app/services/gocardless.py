@@ -1,6 +1,7 @@
 """GoCardless API client for handling user authentication and data retrieval.
 No endpoints are defined here - this is a service class to be used by route handlers."""
 
+import asyncio
 import uuid
 from datetime import datetime, timedelta
 from logging import getLogger
@@ -30,24 +31,39 @@ class GoCardlessClient:
         self.refresh_token: str | None = None
         self.refresh_expires: datetime | None = None
         self.access_expires: datetime | None = None
+        self._token_lock = asyncio.Lock()
 
     async def get_token(self) -> str:
-        "Get valid access token, refreshing or creating as needed."
-        # Buffer of 60 seconds before expiry
-        # short temp token
-        if self.access_token and self.access_expires > datetime.now() + timedelta(
-            seconds=60
-        ):
+        """Get a valid access token, refreshing or re-authenticating as needed.
+
+        Access tokens last ~24h and refresh tokens ~30 days. Once the refresh
+        token has expired (or GoCardless rejects it) we fall back to minting a
+        brand-new token pair from the secret id/key, so a long-running process
+        never gets stuck with a dead refresh token.
+        """
+        async with self._token_lock:
+            if self._is_valid(self.access_token, self.access_expires):
+                return self.access_token
+
+            if self._is_valid(self.refresh_token, self.refresh_expires):
+                try:
+                    await self._refresh()
+                    return self.access_token
+                except httpx.HTTPStatusError as e:
+                    logger.warning(
+                        "GoCardless token refresh failed (%s); requesting new token",
+                        e.response.status_code,
+                    )
+
+            await self._new_token()
             return self.access_token
 
-        # user longer refresh token
-        if self.refresh_token:
-            await self._refresh()
-        # get new token using env vars
-        else:
-            await self._new_token()
-
-        return self.access_token
+    @staticmethod
+    def _is_valid(token: str | None, expires: datetime | None) -> bool:
+        """True if the token exists and has more than 60 seconds left."""
+        return bool(
+            token and expires and expires > datetime.now() + timedelta(seconds=60)
+        )
 
     async def _new_token(self) -> None:
         # POST /api/v2/token/new/ with secret_id/key
