@@ -130,7 +130,7 @@ export class AlpacaDatafeed {
         }
 
         // Transform to TradingView Bar format
-        const bars: Bar[] = data.t.map((_: any, index: number) => ({
+        const bars: Bar[] = data.t.map((_: number, index: number) => ({
           time: data.t[index] * 1000, // Convert to milliseconds
           open: data.o[index],
           high: data.h[index],

@@ -25,6 +25,8 @@ interface StockData {
     }
   }
   update_timestamp?: string
+  // Set by the backend on the first message of a stream (full snapshot)
+  is_initial?: boolean
 }
 
 interface StockSubscription {
@@ -143,7 +145,7 @@ export default function Dashboard() {
             const stock = updated.get(symbol)
             if (!stock) return prev
 
-            if ((data as any).is_initial) {
+            if (data.is_initial) {
               stock.stockData = data
             } else {
               stock.stockData = {
@@ -277,7 +279,7 @@ export default function Dashboard() {
             const stock = updated.get(upperSymbol)
             if (!stock) return prev
 
-            if ((data as any).is_initial) {
+            if (data.is_initial) {
               stock.stockData = data
             } else {
               stock.stockData = {
@@ -541,7 +543,7 @@ export default function Dashboard() {
                     const stock = updated.get(symbol)
                     if (!stock) return prev
 
-                    if ((data as any).is_initial) {
+                    if (data.is_initial) {
                       stock.stockData = data
                     } else {
                       stock.stockData = {
@@ -610,9 +612,10 @@ export default function Dashboard() {
 
   useEffect(() => {
     // Cleanup: close all EventSource connections on unmount
+    const eventSources = eventSourcesRef.current
     return () => {
-      eventSourcesRef.current.forEach(eventSource => eventSource.close())
-      eventSourcesRef.current.clear()
+      eventSources.forEach(eventSource => eventSource.close())
+      eventSources.clear()
     }
   }, [])
 

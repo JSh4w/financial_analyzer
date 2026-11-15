@@ -18,20 +18,6 @@ logger = getLogger(__name__)
 banking_router = APIRouter(prefix="/banking")
 
 
-@banking_router.post("/link")
-async def link_bank(client: GoCardlessClient = Depends(get_banking_client)):
-    """Generate a bank linking URL for the user."""
-    url = await client.create_requisition(...)
-    return {"url": url}
-
-
-@banking_router.get("/get_token")
-async def get_token(client: GoCardlessClient = Depends(get_banking_client)):
-    """Get current GoCardless access token"""
-    token = await client.get_token()
-    return {"token": token}
-
-
 @banking_router.get("/me")
 async def get_current_user_info(
     user_id: str = Depends(get_current_user_id),
@@ -66,13 +52,17 @@ async def requisition(
 ):
     """Create a GoCardless requisition and return the authentication link."""
     try:
-        # Create requisition with GoCardless
-        agreement_id = db.get_end_agreement(institution_id)
-        if agreement_id is None:
-            end_user_agreement = await client.create_end_user_agreement(institution_id)
-            agreement_id = end_user_agreement.get("id", None)
-            if agreement_id:
-                db.store_end_agreement(institution_id, agreement_id)
+        # Each requisition gets its own agreement. Agreements were previously
+        # cached per institution and shared across users, which reused stale
+        # terms (e.g. the old 7-day window) and agreements already consumed by
+        # another user's requisition.
+        end_user_agreement = await client.create_end_user_agreement(institution_id)
+        agreement_id = end_user_agreement.get("id")
+        if not agreement_id:
+            logger.warning(
+                "No end user agreement for %s; using GoCardless defaults",
+                institution_id,
+            )
         result = await client.create_requisition(
             redirect_uri, institution_id, agreement_id, user_id
         )
@@ -210,8 +200,33 @@ async def get_all_balances(
         for req in requisitions:
             requisition_id = req["requisition_id"]
 
-            # Get full requisition details to check status
-            requisition_details = await client.get_requisition_details(requisition_id)
+            # Get full requisition details to check status. One failing bank
+            # link must not take down every other bank's balances.
+            try:
+                requisition_details = await client.get_requisition_details(
+                    requisition_id
+                )
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 404:
+                    logger.info(
+                        "Requisition %s no longer exists at GoCardless; removing",
+                        requisition_id,
+                    )
+                    db.delete_requisition(requisition_id)
+                    continue
+                logger.error(
+                    "Failed to fetch requisition %s: %s", requisition_id, e
+                )
+                pending_requisitions.append(
+                    {
+                        "requisition_id": requisition_id,
+                        "institution_id": req.get("institution_id"),
+                        "institution_name": req.get("institution_id") or "Unknown",
+                        "status": "ERROR",
+                        "message": "Couldn't reach this bank connection. Try again later.",
+                    }
+                )
+                continue
             status = requisition_details.get("status")
             institution_id = requisition_details.get("institution_id")
 
@@ -300,9 +315,23 @@ async def get_all_balances(
                 logger.info(
                     f"Fetching fresh balances for {len(needs_refresh)} accounts"
                 )
-                fresh_balance_information = await client.get_balance_from_accounts(
-                    needs_refresh
-                )
+                fresh_balance_information = []
+                for account in needs_refresh:
+                    try:
+                        fresh_balance_information.extend(
+                            await client.get_balance_from_accounts([account])
+                        )
+                    except httpx.HTTPStatusError as e:
+                        # Fall back to whatever we have cached rather than
+                        # failing the whole request (e.g. on a 429).
+                        logger.error(
+                            "Balance fetch failed for account %s: %s", account, e
+                        )
+                        cached = db.get_balance_details_for_account(account)
+                        if cached:
+                            account_to_balances[account].extend(
+                                cached.get("balances", [])
+                            )
 
                 for balance_info in fresh_balance_information:
                     account_id = balance_info.get("account_id")

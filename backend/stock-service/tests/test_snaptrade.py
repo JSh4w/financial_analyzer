@@ -2,12 +2,12 @@
 
 from unittest.mock import MagicMock
 
-import httpx
 import pytest
 from app.auth import get_current_user_id
 from app.dependencies import get_brokerage_client, get_supabase_db
 from app.main import app
 from fastapi.testclient import TestClient
+from snaptrade_client.exceptions import ApiException
 
 
 @pytest.fixture
@@ -183,29 +183,53 @@ def test_delete_user(snaptrade_client, mock_snaptrade_client, mock_db_manager):
     mock_db_manager.delete_snaptrade_user.assert_called_once_with("test-user-id")
 
 
+def api_error(status, body=None, reason="Error"):
+    """Build the exception the SnapTrade SDK actually raises."""
+    err = ApiException(status=status, reason=reason)
+    err.body = body
+    return err
+
+
 def test_register_http_error(snaptrade_client, mock_snaptrade_client):
-    """Test registration when SnapTrade API returns error"""
-    mock_response = MagicMock()
-    mock_response.status_code = 400
-    error = httpx.HTTPStatusError(
-        "Bad Request", request=MagicMock(), response=mock_response
+    """Registration error: 400 body shape is parsed into the detail"""
+    mock_snaptrade_client.authentication.register_snap_trade_user.side_effect = (
+        api_error(400, {"default_detail": "User already exists", "default_code": 1010})
     )
-    mock_snaptrade_client.authentication.register_snap_trade_user.side_effect = error
 
     response = snaptrade_client.post("/brokerages/register")
     assert response.status_code == 400
-    assert "Failed to register" in response.json()["detail"]
+    detail = response.json()["detail"]
+    assert detail == "Failed to register user: User already exists (SnapTrade code: 1010)"
 
 
 def test_holdings_http_error(snaptrade_client, mock_snaptrade_client):
-    """Test holdings when SnapTrade API returns error on account listing"""
-    mock_response = MagicMock()
-    mock_response.status_code = 401
-    error = httpx.HTTPStatusError(
-        "Unauthorized", request=MagicMock(), response=mock_response
+    """Holdings error: 500 body shape is parsed into the detail"""
+    mock_snaptrade_client.account_information.list_user_accounts.side_effect = (
+        api_error(500, {"detail": "Brokerage unavailable", "status_code": 500, "code": 3003})
     )
-    mock_snaptrade_client.account_information.list_user_accounts.side_effect = error
 
     response = snaptrade_client.get("/brokerages/holdings")
+    assert response.status_code == 500
+    detail = response.json()["detail"]
+    assert detail == "Failed to get holdings: Brokerage unavailable (SnapTrade code: 3003)"
+
+
+def test_login_url_error_with_unparsed_body(snaptrade_client, mock_snaptrade_client):
+    """Raw bytes body and no recognised fields falls back to the HTTP reason"""
+    mock_snaptrade_client.authentication.login_snap_trade_user.side_effect = (
+        api_error(401, b"not json", reason="Unauthorized")
+    )
+
+    response = snaptrade_client.post("/brokerages/login_url")
     assert response.status_code == 401
-    assert "Failed to get holdings" in response.json()["detail"]
+    assert response.json()["detail"] == "Failed to get login URL: Unauthorized"
+
+
+def test_error_without_status_maps_to_502(snaptrade_client, mock_snaptrade_client):
+    """Connection-level failures (no HTTP status) become 502 Bad Gateway"""
+    mock_snaptrade_client.reference_data.list_all_brokerages.side_effect = api_error(
+        None, None, reason="Connection reset"
+    )
+
+    response = snaptrade_client.get("/brokerages/list")
+    assert response.status_code == 502
