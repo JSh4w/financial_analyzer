@@ -3,35 +3,17 @@ import { BankClientDatafeed } from '../services/bankclient-datafeed'
 import { T212Service, T212Summary, T212Error } from '../services/t212-service'
 import { SnapTradeService, SnapTradeError } from '../services/snaptrade-service'
 import { getAuthToken } from '../lib/auth'
+import {
+  BalancesData,
+  accountTitle,
+  getAccounts,
+  primaryBalance,
+  totalBankBalance as sumBankBalances,
+} from '../lib/bankAccounts'
 import { colors, borderRadius, typography } from '../theme'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type SnapTradeHolding = any
-
-interface Balance {
-  balanceAmount: {
-    amount: string
-    currency: string
-  }
-  balanceType: string
-  referenceDate?: string
-}
-
-interface PendingRequisition {
-  requisition_id: string
-  institution_id: string
-  institution_name: string
-  status: string
-  link?: string
-  message: string
-}
-
-interface BalancesData {
-  balances: {
-    [institutionName: string]: Balance[]
-  }
-  pending_requisitions: PendingRequisition[]
-}
 
 interface T212KeysModalProps {
   onClose: () => void
@@ -292,24 +274,7 @@ export default function AllBalances() {
     return '••••••'
   }
 
-  const calculateTotalBankBalance = () => {
-    if (!balancesData || !balancesData.balances) return 0
-
-    let total = 0
-    Object.values(balancesData.balances).forEach((balances) => {
-      if (Array.isArray(balances)) {
-        balances.forEach((balance) => {
-          const amount = parseFloat(balance.balanceAmount.amount)
-          if (!isNaN(amount)) {
-            total += amount
-          }
-        })
-      }
-    })
-    return total
-  }
-
-  const totalBankBalance = calculateTotalBankBalance()
+  const totalBankBalance = sumBankBalances(balancesData)
   const totalT212Balance = t212Summary?.totalWorth || 0
   const totalBrokerageBalance = brokerageHoldings.reduce((sum: number, h: SnapTradeHolding) => {
     return sum + (h.total_value?.value || 0)
@@ -381,69 +346,49 @@ export default function AllBalances() {
             </div>
           </div>
 
-          {/* Bank Balances Section */}
-          {balancesData && Object.keys(balancesData.balances).length > 0 && (
+          {/* Bank Accounts Section: one row per account */}
+          {balancesData && getAccounts(balancesData).length > 0 && (
             <div>
               <h4 style={{ margin: '0 0 16px 0', color: colors.text.primary, fontSize: typography.fontSize.lg, fontWeight: typography.fontWeight.semibold }}>
                 Bank Accounts
               </h4>
-              {Object.entries(balancesData.balances).map(([institutionName, balances]) => (
-                <div
-                  key={institutionName}
-                  style={{
-                    padding: 20,
-                    borderRadius: borderRadius.lg,
-                    border: `1px solid ${colors.border.default}`,
-                    backgroundColor: colors.bg.secondary,
-                    marginBottom: 16,
-                  }}
-                >
-                  <div style={{ marginBottom: 16 }}>
-                    <div style={{ fontSize: typography.fontSize.xl, fontWeight: typography.fontWeight.semibold, color: colors.text.primary }}>
-                      {institutionName}
-                    </div>
-                  </div>
-
-                  {Array.isArray(balances) && balances.length > 0 ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                      {balances.map((balance, idx) => (
-                        <div
-                          key={idx}
-                          style={{
-                            padding: 16,
-                            borderRadius: borderRadius.md,
-                            backgroundColor: colors.bg.tertiary,
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                          }}
-                        >
-                          <div>
-                            <div style={{ fontSize: typography.fontSize.sm, fontWeight: typography.fontWeight.medium, color: colors.text.secondary }}>
-                              {balance.balanceType}
-                            </div>
-                            {balance.referenceDate && (
-                              <div style={{ fontSize: typography.fontSize.xs, color: colors.text.tertiary, marginTop: 4 }}>
-                                As of {new Date(balance.referenceDate).toLocaleDateString()}
-                              </div>
-                            )}
-                          </div>
-                          <div style={{ fontSize: typography.fontSize['2xl'], fontWeight: typography.fontWeight.bold, color: colors.status.success }}>
-                            {showValues
-                              ? formatCurrency(
-                                  balance.balanceAmount.amount,
-                                  balance.balanceAmount.currency
-                                )
-                              : obfuscateValue()}
-                          </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {getAccounts(balancesData).map((account, _, all) => {
+                  const balance = primaryBalance(account)
+                  return (
+                    <div
+                      key={account.account_id}
+                      style={{
+                        padding: 20,
+                        borderRadius: borderRadius.lg,
+                        border: `1px solid ${colors.border.default}`,
+                        backgroundColor: colors.bg.secondary,
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontSize: typography.fontSize.lg, fontWeight: typography.fontWeight.semibold, color: colors.text.primary }}>
+                          {accountTitle(account, all)}
                         </div>
-                      ))}
+                        {balance?.referenceDate && (
+                          <div style={{ fontSize: typography.fontSize.xs, color: colors.text.tertiary, marginTop: 4 }}>
+                            As of {new Date(balance.referenceDate).toLocaleDateString()}
+                          </div>
+                        )}
+                      </div>
+                      <div style={{ fontSize: typography.fontSize['2xl'], fontWeight: typography.fontWeight.bold, color: colors.status.success }}>
+                        {!balance
+                          ? 'No balance'
+                          : showValues
+                            ? formatCurrency(balance.balanceAmount.amount, balance.balanceAmount.currency)
+                            : obfuscateValue()}
+                      </div>
                     </div>
-                  ) : (
-                    <div style={{ color: colors.text.tertiary, fontSize: typography.fontSize.sm }}>No balances available</div>
-                  )}
-                </div>
-              ))}
+                  )
+                })}
+              </div>
             </div>
           )}
 

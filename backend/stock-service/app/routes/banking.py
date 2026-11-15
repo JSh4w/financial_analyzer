@@ -14,6 +14,21 @@ from fastapi import APIRouter, Depends, HTTPException
 
 logger = getLogger(__name__)
 
+# GoCardless requisition status codes -> what the user should be told.
+REQUISITION_STATUS_LABELS = {
+    "CR": "Not started",
+    "GC": "Waiting for you to give consent at the bank",
+    "UA": "Bank is verifying your login",
+    "SA": "Selecting accounts at the bank",
+    "GA": "Bank is granting access",
+    "SU": "Suspended by the bank",
+    "ERROR": "Couldn't reach this bank connection",
+}
+
+
+def status_label(status: str | None) -> str:
+    return REQUISITION_STATUS_LABELS.get(status or "", f"Status: {status}")
+
 
 banking_router = APIRouter(prefix="/banking")
 
@@ -196,6 +211,7 @@ async def get_all_balances(
         # Maps: account_id -> institution_name and account_id -> list of balances
         account_to_institution = {}
         account_to_balances = {}
+        account_to_requisition = {}
 
         for req in requisitions:
             requisition_id = req["requisition_id"]
@@ -223,6 +239,7 @@ async def get_all_balances(
                         "institution_id": req.get("institution_id"),
                         "institution_name": req.get("institution_id") or "Unknown",
                         "status": "ERROR",
+                        "status_label": status_label("ERROR"),
                         "message": "Couldn't reach this bank connection. Try again later.",
                     }
                 )
@@ -242,6 +259,7 @@ async def get_all_balances(
                     for account_id in account_ids:
                         account_to_balances[account_id] = []
                         account_to_institution[account_id] = institution_name
+                        account_to_requisition[account_id] = requisition_id
                 else:
                     logger.warning(
                         f"Requisition {requisition_id} is linked but has no accounts"
@@ -261,8 +279,9 @@ async def get_all_balances(
                         "institution_id": institution_id,
                         "institution_name": institution_name,
                         "status": status,
+                        "status_label": status_label(status),
                         "link": requisition_details.get("link"),
-                        "message": "Please complete authentication by visiting the link",
+                        "message": "Finish connecting at your bank, or remove this connection.",
                     }
                 )
             elif status in ["EX", "RJ"]:  # Expired or Rejected - delete from database
@@ -284,7 +303,8 @@ async def get_all_balances(
                         "institution_id": institution_id,
                         "institution_name": institution_name,
                         "status": status,
-                        "message": f"Requisition status: {status}",
+                        "status_label": status_label(status),
+                        "message": "This connection isn't usable yet. You can remove it and reconnect.",
                     }
                 )
 
@@ -363,8 +383,31 @@ async def get_all_balances(
                 institution_to_balances[institution_name] = []
             institution_to_balances[institution_name].extend(balances)
 
+        # One entry per account, so several accounts at the same bank stay
+        # separate. A missing label only costs the "•••• 1234" hint.
+        accounts = []
+        for account_id, balances in account_to_balances.items():
+            try:
+                label = await client.get_account_label(account_id)
+            except httpx.HTTPError as e:
+                logger.warning("No label for account %s: %s", account_id, e)
+                label = None
+            accounts.append(
+                {
+                    "account_id": account_id,
+                    "requisition_id": account_to_requisition.get(account_id),
+                    "institution_name": account_to_institution.get(
+                        account_id, "Unknown Bank"
+                    ),
+                    "label": label,
+                    "balances": balances,
+                }
+            )
+
         return {
+            # Grouped by bank; kept so older frontends keep working.
             "balances": institution_to_balances,
+            "accounts": accounts,
             "pending_requisitions": pending_requisitions,
         }
     except httpx.HTTPStatusError as e:
