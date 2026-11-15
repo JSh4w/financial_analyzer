@@ -32,6 +32,7 @@ class GoCardlessClient:
         self.refresh_expires: datetime | None = None
         self.access_expires: datetime | None = None
         self._token_lock = asyncio.Lock()
+        self._account_labels: dict[str, str | None] = {}
 
     async def get_token(self) -> str:
         """Get a valid access token, refreshing or re-authenticating as needed.
@@ -232,6 +233,29 @@ class GoCardlessClient:
         )
         response.raise_for_status()
         return response.json() if response.content else {}
+
+    async def get_account_label(self, account_id: str) -> str | None:
+        """Short, non-sensitive label for an account, e.g. "•••• 1234".
+
+        Uses the account metadata endpoint (IBAN/BBAN), not the rate-limited
+        details endpoint. Labels never change, so they are cached per process.
+        Returns None if the bank doesn't expose an account number.
+        """
+        if account_id in self._account_labels:
+            return self._account_labels[account_id]
+
+        token = await self.get_token()
+        response = await self.client.get(
+            f"/api/v2/accounts/{account_id}/",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        response.raise_for_status()
+        data = response.json()
+
+        number = (data.get("iban") or data.get("bban") or "").replace(" ", "")
+        label = f"•••• {number[-4:]}" if len(number) >= 4 else None
+        self._account_labels[account_id] = label
+        return label
 
     async def get_balance_from_accounts(self, account_ids: List[str]) -> List[dict]:
         """Get balance information for given bank account IDs with rate limit handling"""

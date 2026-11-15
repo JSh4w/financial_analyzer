@@ -41,6 +41,10 @@ class FakeGoCardless:
             )
         if path == "/api/v2/agreements/enduser/":
             return httpx.Response(201, json={"id": "agreement-1", **body})
+        if path == "/api/v2/accounts/acc-iban/":
+            return httpx.Response(200, json={"iban": "GB33 BUKB 2020 1555 5555 55"})
+        if path == "/api/v2/accounts/acc-none/":
+            return httpx.Response(200, json={"iban": None})
         return httpx.Response(404, json={"detail": "not found"})
 
     def paths(self) -> list[str]:
@@ -113,3 +117,15 @@ async def test_end_user_agreement_requests_90_days(client, fake):
     assert body["access_valid_for_days"] == 90
     assert body["max_historical_days"] == 90
     assert body["reconfirmation"] is False
+
+
+@pytest.mark.asyncio
+async def test_account_label_masks_iban_and_is_cached(client, fake):
+    assert await client.get_account_label("acc-iban") == "•••• 5555"
+    assert await client.get_account_label("acc-iban") == "•••• 5555"
+    assert fake.paths().count("/api/v2/accounts/acc-iban/") == 1
+
+
+@pytest.mark.asyncio
+async def test_account_label_is_none_without_account_number(client, fake):
+    assert await client.get_account_label("acc-none") is None

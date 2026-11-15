@@ -29,6 +29,7 @@ LINKED = {
 def gc():
     client = MagicMock()
     client.get_institution_name = AsyncMock(return_value="Good Bank")
+    client.get_account_label = AsyncMock(side_effect=lambda acc: f"•••• {acc[-1]}")
     client.get_requisition_details = AsyncMock(return_value=LINKED)
     client.get_balance_from_accounts = AsyncMock(
         side_effect=lambda ids: [
@@ -119,7 +120,7 @@ def test_all_balances_drops_requisition_deleted_at_gocardless(api, gc, db):
 
     r = api.get("/banking/all_balances")
     assert r.status_code == 200
-    assert r.json() == {"balances": {}, "pending_requisitions": []}
+    assert r.json() == {"balances": {}, "accounts": [], "pending_requisitions": []}
     db.delete_requisition.assert_called_once_with("req-gone")
 
 
@@ -132,3 +133,59 @@ def test_all_balances_falls_back_to_cache_when_rate_limited(api, gc, db):
     r = api.get("/banking/all_balances")
     assert r.status_code == 200
     assert r.json()["balances"] == {"Good Bank": [{"amount": "5.00"}]}
+
+
+def test_all_balances_lists_each_account_separately(api, gc):
+    gc.get_requisition_details.return_value = {**LINKED, "accounts": ["acc-1", "acc-2"]}
+
+    r = api.get("/banking/all_balances")
+    assert r.status_code == 200
+    accounts = r.json()["accounts"]
+    assert [a["account_id"] for a in accounts] == ["acc-1", "acc-2"]
+    assert [a["label"] for a in accounts] == ["•••• 1", "•••• 2"]
+    assert all(a["institution_name"] == "Good Bank" for a in accounts)
+    assert all(a["requisition_id"] == "req-ok" for a in accounts)
+    assert all(a["balances"] == [{"amount": "10.00"}] for a in accounts)
+
+
+def test_all_balances_survives_missing_account_label(api, gc):
+    gc.get_account_label.side_effect = http_error(500)
+
+    r = api.get("/banking/all_balances")
+    assert r.status_code == 200
+    [account] = r.json()["accounts"]
+    assert account["label"] is None
+    assert account["balances"] == [{"amount": "10.00"}]
+
+
+def test_pending_requisition_has_readable_status(api, gc):
+    gc.get_requisition_details.return_value = {
+        "id": "req-ok",
+        "status": "GC",
+        "institution_id": "GOOD_BANK",
+        "link": "https://bank/auth",
+    }
+
+    r = api.get("/banking/all_balances")
+    [pending] = r.json()["pending_requisitions"]
+    assert pending["status"] == "GC"
+    assert pending["status_label"] == "Waiting for you to give consent at the bank"
+    assert pending["link"] == "https://bank/auth"
+
+
+def test_delete_pending_requisition(api, gc, db):
+    gc.get_requisition_details.return_value = {"id": "req-ok", "status": "GC", "accounts": []}
+    gc.delete_requisition = AsyncMock(return_value={})
+
+    r = api.delete("/banking/requisition/req-ok")
+    assert r.status_code == 200
+    gc.delete_requisition.assert_awaited_once_with("req-ok")
+    db.delete_requisition.assert_called_once_with("req-ok")
+
+
+def test_delete_requisition_of_another_user_is_404(api, gc, db):
+    gc.delete_requisition = AsyncMock(return_value={})
+
+    r = api.delete("/banking/requisition/someone-elses")
+    assert r.status_code == 404
+    gc.delete_requisition.assert_not_awaited()
